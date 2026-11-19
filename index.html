@@ -1,0 +1,1278 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>賞味期限レスキュー AI</title>
+
+  <!-- PWA設定 -->
+  <meta name="theme-color" content="#2e7d32">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="期限レスキュー">
+
+  <style>
+    :root {
+      --primary: #2e7d32;
+      --primary-light: #e8f5e9;
+      --bg: #ffffff;
+      --card-bg: #ffffff;
+      --text-main: #2c3e50;
+      --text-sub: #455a64;
+      --danger: #d32f2f;
+      --warning: #ed6c02;
+      --table-border: #f8a5a5;
+      --base-font-size: 16px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      font-size: var(--base-font-size);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--text-main);
+      margin: 0;
+      padding: 16px 16px 96px 16px;
+      line-height: 1.6;
+      font-size: 1rem;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 500px;
+      margin: 0 auto;
+    }
+
+    /* ヘッダー（右上の歯車アイコン） */
+    .top-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .app-title {
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: var(--primary);
+      margin: 0;
+    }
+
+    .settings-icon-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 8px;
+      min-width: 48px;
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #222;
+      border-radius: 50%;
+    }
+    .settings-icon-btn:active {
+      background-color: #f0f0f0;
+    }
+
+    /* 通知バナー */
+    .toast-banner {
+      display: none;
+      background-color: #323232;
+      color: #fff;
+      padding: 12px 16px;
+      border-radius: 10px;
+      margin-bottom: 16px;
+      font-size: 0.9rem;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      animation: fadeIn 0.2s ease-out;
+    }
+    .toast-banner.error {
+      background-color: var(--danger);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* 上部中央の大きな枠（メインビュー / プレビュー / 献立ハイライト） */
+    .hero-box {
+      width: 88%;
+      min-height: 200px;
+      margin: 0 auto 24px auto;
+      border: 2.5px solid #222;
+      border-radius: 12px;
+      background-color: #fafafa;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 14px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-box img {
+      max-width: 100%;
+      max-height: 220px;
+      object-fit: contain;
+      border-radius: 8px;
+    }
+
+    .hero-placeholder {
+      color: var(--text-sub);
+      font-size: 0.95rem;
+    }
+
+    .demo-btn {
+      margin-top: 12px;
+      background-color: var(--primary-light);
+      color: var(--primary);
+      border: 1.5px solid var(--primary);
+      border-radius: 999px;
+      padding: 8px 16px;
+      font-size: 0.85rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background-color 0.2s, transform 0.1s;
+    }
+    .demo-btn:active {
+      transform: scale(0.96);
+      background-color: #c8e6c9;
+    }
+
+    /* 中央の3列×4行グリッドテーブル */
+    .grid-table-wrapper {
+      width: 100%;
+      margin-bottom: 20px;
+      overflow-x: auto;
+      border-radius: 8px;
+    }
+
+    .fridge-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    .fridge-table td, .fridge-table th {
+      border: 1.5px solid var(--table-border);
+      padding: 10px 6px;
+      text-align: center;
+      height: 46px;
+      word-break: break-word;
+      font-size: 0.9rem;
+    }
+
+    .fridge-table th {
+      background-color: #fff5f5;
+      color: #c62828;
+      font-weight: bold;
+      font-size: 0.85rem;
+    }
+
+    /* 優先度タグ */
+    .tag {
+      font-size: 0.75rem;
+      font-weight: bold;
+      padding: 3px 6px;
+      border-radius: 6px;
+      color: white;
+      display: inline-block;
+    }
+    .tag-超優先 { background-color: var(--danger); }
+    .tag-優先 { background-color: var(--warning); }
+    .tag-注意 { background-color: #0288d1; }
+    .tag-通常 { background-color: #757575; }
+
+    /* レシピ表示セクション */
+    .recipe-section {
+      display: none;
+      margin-top: 16px;
+    }
+
+    .recipe-card {
+      background: #fff;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .recipe-badge {
+      font-size: 0.75rem;
+      font-weight: bold;
+      padding: 3px 8px;
+      border-radius: 6px;
+      color: white;
+      display: inline-block;
+      margin-bottom: 6px;
+      background-color: var(--primary);
+    }
+    .badge-主菜, .badge-メイン品 { background-color: #d32f2f; }
+    .badge-副菜, .badge-おつまみ品 { background-color: #2e7d32; }
+    .badge-汁物, .badge-スープ・具だくさん汁 { background-color: #0288d1; }
+
+    .recipe-title {
+      font-size: 1.15rem;
+      font-weight: bold;
+      margin: 0 0 8px 0;
+    }
+
+    .step-list {
+      padding-left: 20px;
+      margin: 8px 0 0 0;
+    }
+    .step-list li {
+      margin-bottom: 8px;
+    }
+
+    /* レシピ検索・生成コントロールパネル */
+    .recipe-search-panel {
+      background: #f8fafc;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 16px;
+    }
+
+    .search-input-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .search-input-row input {
+      flex: 1;
+      padding: 10px 12px;
+      border: 2px solid #cbd5e1;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      min-height: 44px;
+    }
+
+    .search-exec-btn {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 0 16px;
+      font-weight: bold;
+      font-size: 0.9rem;
+      cursor: pointer;
+      min-height: 44px;
+      white-space: nowrap;
+    }
+
+    .search-exec-btn:active {
+      transform: scale(0.97);
+    }
+
+    .quick-tags {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .quick-tag-btn {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 999px;
+      padding: 4px 12px;
+      font-size: 0.8rem;
+      color: var(--text-sub);
+      cursor: pointer;
+    }
+
+    .quick-tag-btn:active {
+      background: var(--primary-light);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    /* 下部固定ナビゲーションバー */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 76px;
+      background-color: #ffffff;
+      border-top: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      z-index: 100;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+
+    .nav-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-width: 64px;
+      min-height: 56px;
+      color: #222;
+      padding: 4px;
+      border-radius: 12px;
+      transition: transform 0.1s ease, background-color 0.2s;
+    }
+
+    .nav-btn:active {
+      transform: scale(0.94);
+      background-color: #f5f5f5;
+    }
+
+    .nav-btn.active {
+      color: var(--primary);
+    }
+
+    .nav-label {
+      font-size: 0.7rem;
+      font-weight: bold;
+      margin-top: 4px;
+    }
+
+    /* カメラ撮影モーダル */
+    .camera-box {
+      width: 100%;
+      min-height: 220px;
+      background: #111827;
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+      aspect-ratio: 4 / 3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+
+    .camera-box video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .camera-actions {
+      display: flex;
+      gap: 10px;
+      flex-direction: column;
+    }
+
+    .primary-action-btn {
+      width: 100%;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .secondary-action-btn {
+      width: 100%;
+      background: #f1f5f9;
+      color: var(--text-main);
+      border: 1.5px solid #cbd5e1;
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 0.95rem;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    /* 設定モーダル */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal-content {
+      background: #fff;
+      width: 100%;
+      max-width: 460px;
+      border-radius: 16px;
+      padding: 20px;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .close-btn {
+      background: #eee;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-weight: bold;
+      cursor: pointer;
+      min-height: 44px;
+    }
+
+    label {
+      font-weight: bold;
+      display: block;
+      margin: 12px 0 6px 0;
+      font-size: 0.95rem;
+    }
+
+    input[type="password"], input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #b0bec5;
+      border-radius: 10px;
+      min-height: 48px;
+      font-size: 1rem;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .selector-btn {
+      flex: 1;
+      padding: 10px 4px;
+      border: 2px solid #e0e0e0;
+      background: #f8f9fa;
+      color: var(--text-main);
+      border-radius: 10px;
+      font-weight: bold;
+      cursor: pointer;
+      min-height: 48px;
+      font-size: 0.9rem;
+    }
+
+    .selector-btn.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .loading {
+      text-align: center;
+      display: none;
+      padding: 16px;
+      font-weight: bold;
+      color: var(--primary);
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- トップヘッダー（右上に歯車アイコン） -->
+  <header class="top-header">
+    <h1 class="app-title">🌱 期限レスキュー</h1>
+    <button type="button" id="openSettingsBtn" class="settings-icon-btn" aria-label="設定を開く">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+    </button>
+  </header>
+
+  <!-- 通知メッセージ表示エリア -->
+  <div id="toastBanner" class="toast-banner" role="alert"></div>
+
+  <div id="loading" class="loading">⏳ AIが解析・献立作成中...</div>
+
+  <!-- ホームビュー -->
+  <main id="homeView">
+    <div id="heroBox" class="hero-box">
+      <div id="heroContent" class="hero-placeholder">
+        下の <strong>📷 カメラ</strong> でレシートや冷蔵庫を撮影すると、ここに画像とおすすめ献立が表示されます
+        <div>
+          <button type="button" id="runDemoBtn" class="demo-btn">🧪 サンプル画像でスキャンを試す</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-table-wrapper">
+      <table class="fridge-table">
+        <thead>
+          <tr>
+            <th>食材名</th>
+            <th>賞味期限目安</th>
+            <th>優先度</th>
+          </tr>
+        </thead>
+        <tbody id="fridgeTableBody">
+          <tr><td></td><td></td><td></td></tr>
+          <tr><td></td><td></td><td></td></tr>
+          <tr><td></td><td></td><td></td></tr>
+          <tr><td></td><td></td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- レシピ・保存法ビュー -->
+  <section id="recipeView" class="recipe-section">
+    <div class="recipe-search-panel">
+      <div style="font-weight: bold; font-size: 0.95rem; margin-bottom: 8px; color: var(--text-main);">
+        🔍 食材・キーワードでレシピ検索
+      </div>
+      <div class="search-input-row">
+        <input type="text" id="recipeKeywordInput" placeholder="例: 鶏もも肉、時短、カレー、余り物">
+        <button type="button" id="recipeSearchBtn" class="search-exec-btn">検索</button>
+      </div>
+      <div class="quick-tags">
+        <button type="button" class="quick-tag-btn" data-query="スキャン食材で一汁二菜">🍱 スキャン食材で献立作成</button>
+        <button type="button" class="quick-tag-btn" data-query="10分以内の時短レシピ">⚡ 10分時短</button>
+        <button type="button" class="quick-tag-btn" data-query="フライパンひとつで作れる料理">🍳 ワンパン料理</button>
+        <button type="button" class="quick-tag-btn" data-query="冷蔵庫の残り物消費">♻️ 残り物消費</button>
+      </div>
+    </div>
+
+    <div id="menuSummaryBox"></div>
+    <h2 style="font-size: 1.15rem; color: var(--primary);">🍳 提案レシピ</h2>
+    <div id="recipesContainer"></div>
+    <h2 style="font-size: 1.15rem; color: var(--primary);">🧊 余った食材の長持ち保存法</h2>
+    <div id="preservationContainer"></div>
+  </section>
+</div>
+
+<!-- 非表示のカメラ・画像ファイル入力 -->
+<input type="file" id="imageInput" accept="image/*" capture="environment" style="display: none;">
+
+<!-- 下部固定ナビゲーションバー -->
+<nav class="bottom-nav">
+  <button type="button" id="navRecipeBtn" class="nav-btn" aria-label="レシピを提案">
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="8"></circle>
+      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+    </svg>
+    <span class="nav-label">レシピ作成</span>
+  </button>
+
+  <button type="button" id="navHomeBtn" class="nav-btn active" aria-label="ホーム">
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+      <polyline points="9 22 9 12 15 12 15 22"></polyline>
+    </svg>
+    <span class="nav-label">食材リスト</span>
+  </button>
+
+  <button type="button" id="navCameraBtn" class="nav-btn" aria-label="カメラでスキャン">
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+      <circle cx="12" cy="13" r="4"></circle>
+    </svg>
+    <span class="nav-label">スキャン</span>
+  </button>
+</nav>
+
+<!-- 設定モーダル -->
+<div id="settingsModal" class="modal-overlay">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 style="margin: 0; font-size: 1.2rem;">⚙️ アプリ設定</h2>
+      <button type="button" id="closeSettingsBtn" class="close-btn">閉じる</button>
+    </div>
+
+    <label for="apiKey">Gemini API Key</label>
+    <input type="password" id="apiKey" placeholder="APIキーを入力 (自動保存)">
+
+    <label>献立スタイル</label>
+    <div class="button-group">
+      <button type="button" class="selector-btn style-btn active" data-style="一汁二菜">🍱 一汁二菜</button>
+      <button type="button" class="selector-btn style-btn" data-style="一汁一菜（時短）">⚡ 一汁一菜</button>
+      <button type="button" class="selector-btn style-btn" data-style="おつまみセット">🍺 おつまみ</button>
+    </div>
+
+    <label for="allergiesInput">アレルギー・除外したい食材</label>
+    <input type="text" id="allergiesInput" placeholder="例: 卵, 乳製品, ピーマン">
+
+    <label>文字の大きさ</label>
+    <div class="button-group">
+      <button type="button" class="selector-btn font-size-btn" data-size="14px">小</button>
+      <button type="button" class="selector-btn font-size-btn active" data-size="16px">標準</button>
+      <button type="button" class="selector-btn font-size-btn" data-size="18px">大</button>
+      <button type="button" class="selector-btn font-size-btn" data-size="21px">特大</button>
+    </div>
+    <div style="margin-top: 10px; padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 0.95rem; color: var(--text-sub);">
+      プレビュー表示：文字の大きさがこのように変わります。
+    </div>
+  </div>
+</div>
+
+<!-- カメラ撮影モーダル -->
+<div id="cameraModal" class="modal-overlay">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 style="margin: 0; font-size: 1.15rem;">📷 食材・レシートをスキャン</h2>
+      <button type="button" id="closeCameraBtn" class="close-btn">閉じる</button>
+    </div>
+    <div id="cameraPreviewBox" class="camera-box">
+      <video id="cameraVideo" autoplay playsinline muted></video>
+      <div id="cameraFallbackMsg" style="display:none; color:#f8fafc; padding:20px; text-align:center; font-size:0.9rem; line-height:1.6;">
+        📷 カメラ映像を取得できませんでした。<br>
+        端末のカメラ権限を許可するか、下のボタンから写真を選んでスキャンしてください。
+      </div>
+    </div>
+    <canvas id="cameraCanvas" style="display:none;"></canvas>
+    <div class="camera-actions">
+      <button type="button" id="shutterBtn" class="primary-action-btn">📸 シャッターを切ってスキャン</button>
+      <button type="button" id="selectFileBtn" class="secondary-action-btn">🖼️ 写真・ファイルを選択してスキャン</button>
+      <button type="button" id="modalDemoScanBtn" class="demo-btn" style="margin-top: 2px; width: 100%; padding: 10px;">🧪 サンプルレシートでそのままスキャン</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // DOM要素の取得
+  const settingsModal = document.getElementById('settingsModal');
+  const openSettingsBtn = document.getElementById('openSettingsBtn');
+  const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+  const cameraModal = document.getElementById('cameraModal');
+  const closeCameraBtn = document.getElementById('closeCameraBtn');
+  const cameraVideo = document.getElementById('cameraVideo');
+  const cameraCanvas = document.getElementById('cameraCanvas');
+  const cameraFallbackMsg = document.getElementById('cameraFallbackMsg');
+  const shutterBtn = document.getElementById('shutterBtn');
+  const selectFileBtn = document.getElementById('selectFileBtn');
+  const modalDemoScanBtn = document.getElementById('modalDemoScanBtn');
+  const apiKeyInput = document.getElementById('apiKey');
+  const allergiesInput = document.getElementById('allergiesInput');
+  const imageInput = document.getElementById('imageInput');
+  const loading = document.getElementById('loading');
+  const toastBanner = document.getElementById('toastBanner');
+
+  const homeView = document.getElementById('homeView');
+  const recipeView = document.getElementById('recipeView');
+  const heroContent = document.getElementById('heroContent');
+  const fridgeTableBody = document.getElementById('fridgeTableBody');
+
+  const navRecipeBtn = document.getElementById('navRecipeBtn');
+  const navHomeBtn = document.getElementById('navHomeBtn');
+  const navCameraBtn = document.getElementById('navCameraBtn');
+  const runDemoBtn = document.getElementById('runDemoBtn');
+  const recipeKeywordInput = document.getElementById('recipeKeywordInput');
+  const recipeSearchBtn = document.getElementById('recipeSearchBtn');
+  const quickTagBtns = document.querySelectorAll('.quick-tag-btn');
+
+  let base64Image = null;
+  let scannedItems = [];
+  let isDemoMode = false;
+  let currentStyle = '一汁二菜';
+  let toastTimeout = null;
+  let mediaStream = null;
+
+  // 安全なLocalStorageラッパー（iframe制限対策）
+  function safeGetItem(key, fallback = '') {
+    try {
+      return localStorage.getItem(key) || fallback;
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  function safeSetItem(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch (e) {
+      // プレビュー環境でストレージが制限されていても動作を継続
+    }
+  }
+
+  currentStyle = safeGetItem('APP_MENU_STYLE', '一汁二菜');
+
+  // トースト通知表示
+  function showNotice(message, isError = false) {
+    toastBanner.textContent = message;
+    toastBanner.className = isError ? 'toast-banner error' : 'toast-banner';
+    toastBanner.style.display = 'block';
+    if (toastTimeout) clearTimeout(toastTimeout);
+    toastTimeout = setTimeout(() => {
+      toastBanner.style.display = 'none';
+    }, 4500);
+  }
+
+  // 設定モーダル開閉
+  openSettingsBtn.addEventListener('click', () => {
+    settingsModal.style.display = 'flex';
+  });
+  closeSettingsBtn.addEventListener('click', () => {
+    settingsModal.style.display = 'none';
+  });
+  settingsModal.addEventListener('click', (e) => {
+    if (e.target === settingsModal) {
+      settingsModal.style.display = 'none';
+    }
+  });
+
+  // 設定値の復元・保存
+  apiKeyInput.value = safeGetItem('GEMINI_API_KEY', '');
+  apiKeyInput.addEventListener('input', () => safeSetItem('GEMINI_API_KEY', apiKeyInput.value.trim()));
+
+  allergiesInput.value = safeGetItem('APP_ALLERGIES', '');
+  allergiesInput.addEventListener('input', () => safeSetItem('APP_ALLERGIES', allergiesInput.value.trim()));
+
+  // 献立スタイル設定
+  const styleBtns = document.querySelectorAll('.style-btn');
+  function setMenuStyle(style) {
+    currentStyle = style;
+    safeSetItem('APP_MENU_STYLE', style);
+    styleBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.style === style));
+  }
+  setMenuStyle(currentStyle);
+  styleBtns.forEach(btn => btn.addEventListener('click', () => setMenuStyle(btn.dataset.style)));
+
+  // 文字サイズ設定
+  const fontBtns = document.querySelectorAll('.font-size-btn');
+  function setFontSize(size, notify = false) {
+    document.documentElement.style.setProperty('--base-font-size', size);
+    document.documentElement.style.fontSize = size;
+    safeSetItem('APP_FONT_SIZE', size);
+    fontBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.size === size));
+    if (notify) {
+      const labelMap = { '14px': '小', '16px': '標準', '18px': '大', '21px': '特大' };
+      showNotice(`文字の大きさを「${labelMap[size] || size}」に変更しました`);
+    }
+  }
+  setFontSize(safeGetItem('APP_FONT_SIZE', '16px'), false);
+  fontBtns.forEach(btn => btn.addEventListener('click', () => setFontSize(btn.dataset.size, true)));
+
+  // ナビゲーション制御（画面切り替え）
+  function switchTab(tab) {
+    navHomeBtn.classList.toggle('active', tab === 'home');
+    navRecipeBtn.classList.toggle('active', tab === 'recipe');
+
+    if (tab === 'home') {
+      homeView.style.display = 'block';
+      recipeView.style.display = 'none';
+    } else if (tab === 'recipe') {
+      homeView.style.display = 'none';
+      recipeView.style.display = 'block';
+    }
+  }
+
+  navHomeBtn.addEventListener('click', () => switchTab('home'));
+
+  // カメラストリーム停止処理
+  function stopCameraStream() {
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(track => track.stop());
+      mediaStream = null;
+    }
+    cameraVideo.srcObject = null;
+  }
+
+  // カメラモーダルを閉じる
+  function closeCameraModal() {
+    stopCameraStream();
+    cameraModal.style.display = 'none';
+  }
+
+  closeCameraBtn.addEventListener('click', closeCameraModal);
+  cameraModal.addEventListener('click', (e) => {
+    if (e.target === cameraModal) closeCameraModal();
+  });
+
+  // 右の📷ボタン押下時：カメラを起動
+  navCameraBtn.addEventListener('click', async () => {
+    stopCameraStream();
+    cameraModal.style.display = 'flex';
+    cameraVideo.style.display = 'block';
+    cameraFallbackMsg.style.display = 'none';
+    shutterBtn.style.display = 'flex';
+    shutterBtn.disabled = true;
+    shutterBtn.textContent = '⏳ カメラを起動中...';
+
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false
+        });
+        cameraVideo.srcObject = mediaStream;
+        await cameraVideo.play();
+        shutterBtn.disabled = false;
+        shutterBtn.textContent = '📸 シャッターを切ってスキャン';
+      } catch (err) {
+        cameraVideo.style.display = 'none';
+        shutterBtn.style.display = 'none';
+        cameraFallbackMsg.style.display = 'block';
+      }
+    } else {
+      cameraVideo.style.display = 'none';
+      shutterBtn.style.display = 'none';
+      cameraFallbackMsg.style.display = 'block';
+    }
+  });
+
+  // シャッターボタン押下時
+  shutterBtn.addEventListener('click', async () => {
+    if (!mediaStream) return;
+    const width = cameraVideo.videoWidth || 640;
+    const height = cameraVideo.videoHeight || 480;
+    cameraCanvas.width = width;
+    cameraCanvas.height = height;
+    const ctx = cameraCanvas.getContext('2d');
+    ctx.drawImage(cameraVideo, 0, 0, width, height);
+    const dataUrl = cameraCanvas.toDataURL('image/jpeg', 0.85);
+    closeCameraModal();
+    await processCapturedImage(dataUrl);
+  });
+
+  // ファイル選択ボタン押下時
+  selectFileBtn.addEventListener('click', () => {
+    imageInput.click();
+  });
+
+  // カメラモーダル内のサンプルスキャンボタン押下時
+  modalDemoScanBtn.addEventListener('click', () => {
+    closeCameraModal();
+    runDemoScan();
+  });
+
+  // 左の🔍ボタン押下時（レシピ検索・作成画面へ切り替え）
+  navRecipeBtn.addEventListener('click', async () => {
+    switchTab('recipe');
+
+    if (scannedItems.length > 0) {
+      if (!recipeKeywordInput.value.trim()) {
+        recipeKeywordInput.value = scannedItems.map(i => i.name).join('・');
+      }
+      if (isDemoMode || !apiKeyInput.value.trim()) {
+        runDemoRecipes(recipeKeywordInput.value.trim());
+        return;
+      }
+      await generateRecipes(recipeKeywordInput.value.trim());
+    } else {
+      recipeKeywordInput.focus();
+      if (!document.getElementById('recipesContainer').innerHTML.trim()) {
+        runDemoRecipes('おすすめ定番レスキュー献立');
+      }
+    }
+  });
+
+  // レシピ検索実行
+  async function executeRecipeSearch() {
+    const query = recipeKeywordInput.value.trim();
+    if (!query && scannedItems.length === 0) {
+      showNotice('検索したい食材名や料理のキーワードを入力してください。', true);
+      recipeKeywordInput.focus();
+      return;
+    }
+
+    if (!apiKeyInput.value.trim()) {
+      runDemoRecipes(query || scannedItems.map(i => i.name).join('・'));
+      return;
+    }
+    await generateRecipes(query);
+  }
+
+  recipeSearchBtn.addEventListener('click', executeRecipeSearch);
+  recipeKeywordInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      executeRecipeSearch();
+    }
+  });
+
+  quickTagBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      recipeKeywordInput.value = btn.dataset.query;
+      executeRecipeSearch();
+    });
+  });
+
+  // デモ体験用サンプルスキャン
+  function runDemoScan() {
+    isDemoMode = true;
+    loading.style.display = 'block';
+    const sampleSvg = `data:image/svg+xml;utf8,${encodeURIComponent(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="320" height="190" viewBox="0 0 320 190">
+        <rect width="320" height="190" rx="10" fill="#ffffff" stroke="#cfd8dc" stroke-width="2"/>
+        <text x="160" y="28" font-family="sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#2e7d32">🧾 スーパーお買い上げレシート</text>
+        <line x1="24" y1="40" x2="296" y2="40" stroke="#eceff1" stroke-width="2"/>
+        <text x="30" y="64" font-family="sans-serif" font-size="13" fill="#37474f">・鶏もも肉 (300g)        ¥398</text>
+        <text x="30" y="90" font-family="sans-serif" font-size="13" fill="#37474f">・ほうれん草 (1束)       ¥158</text>
+        <text x="30" y="116" font-family="sans-serif" font-size="13" fill="#37474f">・木綿豆腐 (1丁)         ¥98</text>
+        <text x="30" y="142" font-family="sans-serif" font-size="13" fill="#37474f">・しめじ (1パック)       ¥128</text>
+        <line x1="24" y1="156" x2="296" y2="156" stroke="#eceff1" stroke-width="2"/>
+        <text x="290" y="176" font-family="sans-serif" font-size="12" font-weight="bold" text-anchor="end" fill="#455a64">スキャン完了 ✓</text>
+      </svg>
+    `)}`;
+
+    setTimeout(() => {
+      heroContent.innerHTML = `<img src="${sampleSvg}" alt="サンプルレシート画像">`;
+      scannedItems = [
+        { name: '鶏もも肉', quantity: '300g', estimated_expiration: '明日まで', days_left: 1, priority_tag: '【超優先】' },
+        { name: 'ほうれん草', quantity: '1束', estimated_expiration: 'あと2日', days_left: 2, priority_tag: '【優先】' },
+        { name: '木綿豆腐', quantity: '1丁', estimated_expiration: 'あと3日', days_left: 3, priority_tag: '【注意】' },
+        { name: 'しめじ', quantity: '1パック', estimated_expiration: 'あと5日', days_left: 5, priority_tag: '【通常】' }
+      ];
+      renderTable();
+      loading.style.display = 'none';
+      showNotice('サンプルレシートから4件の食材を読み取りました！下の🔍ボタンで献立を作成できます。');
+    }, 400);
+  }
+
+  runDemoBtn.addEventListener('click', runDemoScan);
+
+  // デモ用レシピ検索・作成
+  function runDemoRecipes(searchQuery = '') {
+    loading.style.display = 'block';
+    setTimeout(() => {
+      const keywordLabel = searchQuery ? `「${searchQuery}」の検索結果` : currentStyle;
+      const demoRes = {
+        menu_summary: {
+          style_name: keywordLabel,
+          summary_text: searchQuery
+            ? `キーワード「${searchQuery}」に合わせて提案した、無駄なく使い切れるレスキュー献立です！`
+            : '超優先の鶏もも肉とほうれん草を使い切る、栄養満点のレスキュー献立です！',
+          total_time_minutes: 20
+        },
+        recipes: [
+          {
+            category_type: '主菜',
+            title: '鶏もも肉としめじのガリバタ醤油ソテー',
+            cooking_time: 12,
+            ingredients: ['鶏もも肉 300g', 'しめじ 1/2パック', 'バター 10g', '醤油 大さじ1.5'],
+            steps: ['鶏もも肉は一口大に切り、塩こしょうを振る。', 'フライパンで鶏肉を皮目から焼き、火が通ったらほぐしたしめじを加える。', 'バターと醤油を回しかけ、全体に絡めたら完成。']
+          },
+          {
+            category_type: '副菜',
+            title: 'ほうれん草のさっぱり胡麻和え',
+            cooking_time: 5,
+            ingredients: ['ほうれん草 1束', 'すりごま 大さじ2', 'めんつゆ 大さじ1'],
+            steps: ['ほうれん草をラップで包み、600Wのレンジで2分加熱する。', '冷水にとって水気を絞り、3cm幅に切る。', 'すりごまとめんつゆで和えて器に盛る。']
+          },
+          {
+            category_type: '汁物',
+            title: '木綿豆腐としめじのほっこり味噌汁',
+            cooking_time: 6,
+            ingredients: ['木綿豆腐 1/2丁', 'しめじ 1/2パック', 'だし汁 400ml', '味噌 大さじ1.5'],
+            steps: ['鍋にだし汁としめじを入れて中火で煮る。', 'さいの目切りにした木綿豆腐を加え、ひと煮立ちさせる。', '火を止めて味噌を溶き入れる。']
+          }
+        ],
+        preservation_guides: [
+          {
+            ingredient_name: '木綿豆腐（残り1/2丁）',
+            title: '水を張った保存容器で冷蔵保存',
+            instruction: '清潔な保存容器に豆腐を入れ、かぶるくらいの水を注いでフタをし冷蔵庫へ。毎日水を替えると3〜4日鮮度を保てます。'
+          }
+        ]
+      };
+      renderRecipeResults(demoRes);
+      loading.style.display = 'none';
+    }, 450);
+  }
+
+  // 画像選択・解析実行
+  imageInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    closeCameraModal();
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      await processCapturedImage(event.target.result);
+    };
+    reader.readAsDataURL(file);
+    imageInput.value = '';
+  });
+
+  // 撮影・選択された画像の共通スキャン処理
+  async function processCapturedImage(dataUrl) {
+    base64Image = dataUrl.split(',')[1];
+    heroContent.innerHTML = `<img src="${dataUrl}" alt="スキャン画像">`;
+    switchTab('home');
+
+    if (!apiKeyInput.value.trim()) {
+      isDemoMode = true;
+      loading.style.display = 'block';
+      setTimeout(() => {
+        scannedItems = [
+          { name: '豚こま切れ肉', quantity: '250g', estimated_expiration: '明日まで', days_left: 1, priority_tag: '【超優先】' },
+          { name: 'キャベツ', quantity: '1/4玉', estimated_expiration: 'あと2日', days_left: 2, priority_tag: '【優先】' },
+          { name: 'にんじん', quantity: '1本', estimated_expiration: 'あと4日', days_left: 4, priority_tag: '【注意】' },
+          { name: 'たまご', quantity: '6個', estimated_expiration: 'あと7日', days_left: 7, priority_tag: '【通常】' }
+        ];
+        renderTable();
+        loading.style.display = 'none';
+        showNotice('画像をスキャンしました！（⚙️からGemini APIキーを設定すると実際の写真からAIが自動判別します）');
+      }, 600);
+      return;
+    }
+
+    isDemoMode = false;
+    await scanImage();
+  }
+
+  // 1. Gemini REST APIによる画像解析
+  async function scanImage() {
+    loading.style.display = 'block';
+
+    try {
+      const apiKey = apiKeyInput.value.trim();
+      const today = new Date().toISOString().split('T')[0];
+      const prompt = `本日日付:${today}。画像から食材を抽出し、優先度タグ（【超優先】【優先】【注意】【通常】）を付与してください。`;
+
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            role: 'user',
+            parts: [
+              { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
+              { text: prompt }
+            ]
+          }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: 'OBJECT',
+              properties: {
+                items: {
+                  type: 'ARRAY',
+                  items: {
+                    type: 'OBJECT',
+                    properties: {
+                      name: { type: 'STRING' },
+                      quantity: { type: 'STRING' },
+                      estimated_expiration: { type: 'STRING' },
+                      days_left: { type: 'INTEGER' },
+                      priority_tag: { type: 'STRING', enum: ['【超優先】', '【優先】', '【注意】', '【通常】'] }
+                    },
+                    required: ['name', 'estimated_expiration', 'days_left', 'priority_tag']
+                  }
+                }
+              },
+              required: ['items']
+            }
+          }
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error?.message || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{"items":[]}';
+      scannedItems = JSON.parse(text).items || [];
+      renderTable();
+      showNotice(`${scannedItems.length}件の食材を読み取りました！`);
+
+    } catch (err) {
+      showNotice('スキャン失敗: ' + err.message, true);
+    } finally {
+      loading.style.display = 'none';
+    }
+  }
+
+  // 3列×最低4行のグリッド表を描画
+  function renderTable() {
+    const minRows = 4;
+    let rowsHtml = '';
+
+    for (let i = 0; i < Math.max(scannedItems.length, minRows); i++) {
+      const item = scannedItems[i];
+      if (item) {
+        const tagClean = item.priority_tag.replace(/[【】]/g, '');
+        rowsHtml += `
+          <tr>
+            <td><strong>${item.name}</strong><br><small>${item.quantity || ''}</small></td>
+            <td>${item.estimated_expiration}<br><small>(残り${item.days_left}日)</small></td>
+            <td><span class="tag tag-${tagClean}">${item.priority_tag}</span></td>
+          </tr>
+        `;
+      } else {
+        rowsHtml += `<tr><td></td><td></td><td></td></tr>`;
+      }
+    }
+
+    fridgeTableBody.innerHTML = rowsHtml;
+  }
+
+  // 2. Gemini REST APIによるレシピ生成・検索
+  async function generateRecipes(searchQuery = '') {
+    loading.style.display = 'block';
+
+    try {
+      const apiKey = apiKeyInput.value.trim();
+      const allergies = allergiesInput.value.trim();
+      const allergyConstraint = allergies ? `\n【絶対禁止・除外食材】: ${allergies}` : '';
+
+      let styleInstruction = '';
+      if (currentStyle === '一汁一菜（時短）') {
+        styleInstruction = '【構成】: 具だくさんメイン品1品 + 具だくさんスープ1品の合計2品セット（15分以内）。';
+      } else if (currentStyle === 'おつまみセット') {
+        styleInstruction = '【構成】: 手軽につまめるおつまみ小鉢2〜3品のセット。';
+      } else {
+        styleInstruction = '【構成】: 主菜1品 + 副菜1品 + 汁物1品の一汁二菜バランスセット。';
+      }
+
+      const searchConstraint = searchQuery
+        ? `\n【検索キーワード・リクエスト】: 「${searchQuery}」に関連するレシピを優先して検索・提案してください。`
+        : '';
+
+      const itemsText = scannedItems.length > 0
+        ? scannedItems.map(i => `${i.priority_tag} ${i.name} (${i.quantity || '適量'})`).join('\n')
+        : '指定なし（検索キーワードの食材を中心に一般的な家庭の調味料を使用）';
+
+      const prompt = `
+        指定された献立スタイル「${currentStyle}」と検索リクエストに沿ってメニューを検索・提案してください。
+        ${styleInstruction}
+        ${searchConstraint}
+        【超優先】の食材がある場合は最優先で使い切ってください。
+        ${allergyConstraint}
+
+        手持ち食材リスト:
+        ${itemsText}
+      `;
+
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: 'OBJECT',
+              properties: {
+                menu_summary: {
+                  type: 'OBJECT',
+                  properties: {
+                    style_name: { type: 'STRING' },
+                    summary_text: { type: 'STRING' },
+                    total_time_minutes: { type: 'INTEGER' }
+                  },
+                  required: ['style_name', 'summary_text', 'total_time_minutes']
+                },
+                recipes: {
+                  type: 'ARRAY',
+                  items: {
+                    type: 'OBJECT',
+                    properties: {
+                      category_type: { type: 'STRING' },
+                      title: { type: 'STRING' },
+                      cooking_time: { type: 'INTEGER' },
+                      ingredients: { type: 'ARRAY', items: { type: 'STRING } },
+                      steps: { type: 'ARRAY', items: { type: 'STRING } }
+                    },
+                    required: ['category_type', 'title', 'ingredients', 'steps']
+                  }
+                },
+                preservation_guides: {
+                  type: 'ARRAY',
+                  items: {
+                    type: 'OBJECT',
+                    properties: {
+                      ingredient_name: { type: 'STRING' },
+                      title: { type: 'STRING' },
+                      instruction: { type: 'STRING' }
+                    },
+                    required: ['ingredient_name', 'title', 'instruction']
+                  }
+                }
+              },
+              required: ['menu_summary', 'recipes', 'preservation_guides']
+            }
+          }
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error?.message || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      const parsed = JSON.parse(text);
+      renderRecipeResults(parsed);
+
+    } catch (err) {
+      showNotice('献立作成エラー: ' + err.message, true);
+    } finally {
+      loading.style.display = 'none';
+    }
+  }
+
+  // レシピ結果の描画処理
+  function renderRecipeResults(res) {
+    heroContent.innerHTML = `
+      <div style="text-align:left; width:100%;">
+        <div style="font-weight:bold; color:var(--primary); margin-bottom:4px;">✨ ${res.menu_summary.style_name} (約${res.menu_summary.total_time_minutes}分)</div>
+        <div style="font-size:0.9rem;">${res.menu_summary.summary_text}</div>
+      </div>
+    `;
+
+    document.getElementById('menuSummaryBox').innerHTML = `
+      <div class="recipe-card" style="background: var(--primary-light); border-color: var(--primary);">
+        <strong>✨ ${res.menu_summary.style_name} (合計 約${res.menu_summary.total_time_minutes}分)</strong>
+        <p style="margin: 6px 0 0 0; font-size: 0.9rem;">${res.menu_summary.summary_text}</p>
+      </div>
+    `;
+
+    document.getElementById('recipesContainer').innerHTML = (res.recipes || []).map(r => `
+      <div class="recipe-card">
+        <span class="recipe-badge badge-${r.category_type}">${r.category_type}</span>
+        <h3 class="recipe-title">${r.title}</h3>
+        <div style="font-size: 0.85rem; color: var(--text-sub); margin-bottom: 8px;">
+          ⏱️ ${r.cooking_time || 10}分 | 食材: ${(r.ingredients || []).join(', ')}
+        </div>
+        <ol class="step-list">
+          ${(r.steps || []).map(s => `<li>${s}</li>`).join('')}
+        </ol>
+      </div>
+    `).join('');
+
+    document.getElementById('preservationContainer').innerHTML = (res.preservation_guides || []).map(p => `
+      <div class="recipe-card" style="border-left: 4px solid var(--primary);">
+        <strong>🧊 ${p.ingredient_name}: ${p.title}</strong>
+        <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: var(--text-sub);">${p.instruction}</p>
+      </div>
+    `).join('');
+
+    switchTab('recipe');
+  }
+</script>
+
+</body>
+</html>
