@@ -1016,9 +1016,29 @@
     stopCameraStream();
     cameraModal.style.display = 'none';
   }
-  function showCameraFallback() {
+  // カメラが使えない理由に応じた案内を表示
+  function cameraErrorMessage(err) {
+    if (!window.isSecureContext) return 'カメラはHTTPSで開いたページでのみ使えます。';
+    if (!err) return 'このブラウザはカメラ映像の取得に対応していません。';
+    switch (err.name) {
+      case 'NotAllowedError':
+      case 'SecurityError':
+        return 'カメラの使用が許可されていません。アドレスバー横の🔒（またはiPhoneの「設定」→ Safari →カメラ）からカメラを「許可」にして、もう一度お試しください。';
+      case 'NotFoundError':
+      case 'OverconstrainedError':
+        return 'この端末でカメラが見つかりませんでした。';
+      case 'NotReadableError':
+      case 'AbortError':
+        return 'カメラを他のアプリが使用中の可能性があります。他のアプリを閉じてから再度お試しください。';
+      default:
+        return `カメラを起動できませんでした（${err.name || 'エラー'}）。`;
+    }
+  }
+
+  function showCameraFallback(err) {
     cameraVideo.style.display = 'none';
     shutterBtn.style.display = 'none';
+    cameraFallbackMsg.innerHTML = `📷 ${escapeHtml(cameraErrorMessage(err))}<br><br>下の「写真・ファイルを選択」からでも撮影・スキャンできます。`;
     cameraFallbackMsg.style.display = 'block';
   }
 
@@ -1056,7 +1076,7 @@
       shutterBtn.textContent = '📸 シャッターを切ってスキャン';
     } catch (err) {
       stopCameraStream();
-      showCameraFallback();
+      showCameraFallback(err);
     }
   });
 
