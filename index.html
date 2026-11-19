@@ -6,7 +6,13 @@
   <title>賞味期限レスキュー AI</title>
 
   <!-- PWA設定 -->
+  <meta name="description" content="レシートや冷蔵庫を撮影して食材の賞味期限を管理し、期限が近い食材を使い切る献立をAIが提案します。">
   <meta name="theme-color" content="#2e7d32">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="期限レスキュー">
@@ -563,6 +569,57 @@
       padding: 6px;
     }
 
+    /* オフライン表示・更新通知 */
+    .offline-badge {
+      display: none;
+      background: #fff3e0;
+      color: #e65100;
+      border: 1px solid #ffcc80;
+      border-radius: 10px;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      font-size: 0.85rem;
+      font-weight: bold;
+    }
+    .update-banner {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: var(--primary-light);
+      border: 1.5px solid var(--primary);
+      border-radius: 10px;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      font-size: 0.85rem;
+    }
+    .update-banner button {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-weight: bold;
+      cursor: pointer;
+      min-height: 36px;
+    }
+    .install-section {
+      display: none;
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid #e0e0e0;
+    }
+    .install-hint {
+      font-size: 0.85rem;
+      color: var(--text-sub);
+      margin: 6px 0 0 0;
+    }
+
+    /* ホーム画面アプリとして起動時：ノッチ部分の余白 */
+    @media (display-mode: standalone) {
+      body { padding-top: calc(16px + env(safe-area-inset-top)); }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       * { animation: none !important; transition: none !important; }
     }
@@ -581,6 +638,12 @@
       </svg>
     </button>
   </header>
+
+  <div id="offlineBadge" class="offline-badge" role="status">📴 オフラインです。食材リストの確認・編集はできますが、AIスキャンと献立作成は使えません。</div>
+  <div id="updateBanner" class="update-banner" role="status">
+    <span>✨ 新しいバージョンがあります</span>
+    <button type="button" id="updateReloadBtn">更新する</button>
+  </div>
 
   <!-- 通知メッセージ表示エリア -->
   <div id="toastBanner" class="toast-banner" role="alert"></div>
@@ -719,6 +782,12 @@
     </div>
     <div style="margin-top: 10px; padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 0.95rem; color: var(--text-sub);">
       プレビュー表示：文字の大きさがこのように変わります。
+    </div>
+
+    <div id="installSection" class="install-section">
+      <label style="margin-top: 0;">📲 ホーム画面に追加</label>
+      <button type="button" id="installBtn" class="primary-action-btn" style="display: none;">アプリとしてインストール</button>
+      <p id="installHint" class="install-hint"></p>
     </div>
   </div>
 </div>
@@ -1050,6 +1119,7 @@
 
   // ===== Gemini API 共通呼び出し =====
   async function callGemini(parts, responseSchema) {
+    if (!navigator.onLine) throw new Error('オフラインです。インターネットに接続してから再試行してください。');
     const apiKey = apiKeyInput.value.trim();
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
       method: 'POST',
@@ -1511,6 +1581,92 @@
     const urgent = scannedItems.filter(i => daysLeft(i) <= 1).length;
     if (urgent > 0) showNotice(`⚠️ 期限が明日までの食材が${urgent}件あります。早めに使い切りましょう！`);
   }
+
+  // ===== PWA: オフライン表示 =====
+  const offlineBadge = $('offlineBadge');
+  function updateOnlineStatus() {
+    offlineBadge.style.display = navigator.onLine ? 'none' : 'block';
+  }
+  window.addEventListener('online', updateOnlineStatus);
+  window.addEventListener('offline', updateOnlineStatus);
+  updateOnlineStatus();
+
+  // ===== PWA: Service Worker 登録と更新通知 =====
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    window.addEventListener('load', async () => {
+      try {
+        const reg = await navigator.serviceWorker.register('sw.js');
+        let updateRequested = false;
+        const showUpdate = (worker) => {
+          $('updateBanner').style.display = 'flex';
+          $('updateReloadBtn').onclick = () => {
+            updateRequested = true;
+            worker.postMessage('SKIP_WAITING');
+          };
+        };
+        if (reg.waiting && navigator.serviceWorker.controller) showUpdate(reg.waiting);
+        reg.addEventListener('updatefound', () => {
+          const worker = reg.installing;
+          worker?.addEventListener('statechange', () => {
+            if (worker.state === 'installed' && navigator.serviceWorker.controller) showUpdate(worker);
+          });
+        });
+        let reloaded = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          // 初回インストール時(clients.claim)は再読み込みせず、ユーザーが更新を選んだ時だけ再読み込み
+          if (reloaded || !updateRequested) return;
+          reloaded = true;
+          location.reload();
+        });
+      } catch (e) {
+        console.warn('Service Worker の登録に失敗しました', e);
+      }
+    });
+  }
+
+  // ===== PWA: インストール案内 =====
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const installSection = $('installSection');
+  const installBtn = $('installBtn');
+  const installHint = $('installHint');
+  let deferredInstallPrompt = null;
+
+  if (!isStandalone) {
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (isIOS) {
+      installSection.style.display = 'block';
+      installHint.textContent = 'Safariの共有ボタン（□↑）から「ホーム画面に追加」を選ぶと、アプリのように使えます。';
+    }
+  }
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    installSection.style.display = 'block';
+    installBtn.style.display = 'flex';
+    installHint.textContent = 'ホーム画面から全画面で起動でき、オフラインでも食材リストを確認できます。';
+  });
+
+  installBtn.addEventListener('click', async () => {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    const { outcome } = await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    installBtn.style.display = 'none';
+    if (outcome === 'accepted') installSection.style.display = 'none';
+  });
+
+  window.addEventListener('appinstalled', () => {
+    installSection.style.display = 'none';
+    showNotice('ホーム画面に追加しました！');
+  });
+
+  // ===== PWA: ショートカット（ホーム画面アイコン長押し）からの起動 =====
+  const launchAction = new URLSearchParams(location.search).get('action');
+  if (launchAction === 'scan') navCameraBtn.click();
+  else if (launchAction === 'recipe') navRecipeBtn.click();
+  if (launchAction) history.replaceState(null, '', location.pathname);
 </script>
 
 </body>
