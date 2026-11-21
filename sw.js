@@ -1,6 +1,6 @@
 // 賞味期限レスキュー AI - Service Worker
 // アプリ本体を更新したら CACHE_VERSION を上げてください（古いキャッシュが削除されます）
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = `kigen-rescue-${CACHE_VERSION}`;
 
 const APP_SHELL = [

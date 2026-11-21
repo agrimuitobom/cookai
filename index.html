@@ -241,6 +241,56 @@
       margin-bottom: 8px;
     }
 
+    /* アレルギー警告・買い足し・作ったボタン */
+    .allergy-warning {
+      background: #ffebee;
+      border: 1.5px solid var(--danger);
+      color: #b71c1c;
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin: 6px 0 10px 0;
+      font-size: 0.85rem;
+      font-weight: bold;
+    }
+    .allergy-disclaimer {
+      font-size: 0.8rem;
+      color: var(--text-sub);
+      margin: -6px 0 16px 0;
+    }
+    .ingredient-list {
+      margin: 0 0 8px 0;
+      padding-left: 20px;
+      font-size: 0.9rem;
+    }
+    .need-buy {
+      color: var(--warning);
+      font-weight: bold;
+    }
+    .used-items {
+      font-size: 0.85rem;
+      color: var(--text-sub);
+      margin-top: 10px;
+    }
+    .cooked-btn {
+      margin-top: 8px;
+      width: 100%;
+      background: #fff;
+      color: var(--primary);
+      border: 1.5px solid var(--primary);
+      border-radius: 10px;
+      padding: 10px;
+      font-weight: bold;
+      font-size: 0.9rem;
+      cursor: pointer;
+      min-height: 44px;
+    }
+    .cooked-btn:active { background: var(--primary-light); }
+    .current-style-note {
+      font-size: 0.8rem;
+      color: var(--text-sub);
+      margin-top: 10px;
+    }
+
     /* レシピ検索・生成コントロールパネル */
     .recipe-search-panel {
       background: #f8fafc;
@@ -700,18 +750,22 @@
         🔍 食材・キーワードでレシピ検索
       </div>
       <div class="search-input-row">
-        <input type="text" id="recipeKeywordInput" placeholder="例: 鶏もも肉、時短、カレー、余り物">
+        <input type="text" id="recipeKeywordInput" placeholder="空欄なら食材リストから献立を作成（例: カレー、時短）" aria-label="検索キーワード">
         <button type="button" id="recipeSearchBtn" class="search-exec-btn">検索</button>
       </div>
       <div class="quick-tags">
-        <button type="button" class="quick-tag-btn" data-query="スキャン食材で一汁二菜">🍱 スキャン食材で献立作成</button>
+        <button type="button" class="quick-tag-btn" data-query="">🍱 食材リストで献立作成</button>
         <button type="button" class="quick-tag-btn" data-query="10分以内の時短レシピ">⚡ 10分時短</button>
         <button type="button" class="quick-tag-btn" data-query="フライパンひとつで作れる料理">🍳 ワンパン料理</button>
         <button type="button" class="quick-tag-btn" data-query="冷蔵庫の残り物消費">♻️ 残り物消費</button>
       </div>
+      <div id="currentStyleNote" class="current-style-note"></div>
     </div>
 
     <div id="menuSummaryBox"></div>
+    <p id="allergyDisclaimer" class="allergy-disclaimer" style="display: none;">
+      ※ AIによる提案です。アレルギーのある方は、加工品・調味料も含めて必ず原材料表示を確認してください。
+    </p>
     <h2 style="font-size: 1.15rem; color: var(--primary);">🍳 提案レシピ</h2>
     <div id="recipesContainer"></div>
     <h2 style="font-size: 1.15rem; color: var(--primary);">🧊 余った食材の長持ち保存法</h2>
@@ -772,6 +826,15 @@
 
     <label for="allergiesInput">アレルギー・除外したい食材</label>
     <input type="text" id="allergiesInput" placeholder="例: 卵, 乳製品, ピーマン">
+    <div style="font-size: 0.8rem; color: var(--text-sub); margin-top: 4px;">
+      提案されたレシピに該当食材（例: 卵→マヨネーズ）が含まれていないかも自動でチェックします。
+    </div>
+
+    <label for="seasoningsInput">家にある調味料・常備品</label>
+    <input type="text" id="seasoningsInput" placeholder="空欄なら基本調味料（塩・こしょう・醤油・砂糖・みりん・酒・味噌・油）">
+    <div style="font-size: 0.8rem; color: var(--text-sub); margin-top: 4px;">
+      ここにない調味料が必要なレシピには「買い足し」と表示します。
+    </div>
 
     <label>文字の大きさ</label>
     <div class="button-group">
@@ -826,6 +889,7 @@
   const shutterBtn = $('shutterBtn');
   const apiKeyInput = $('apiKey');
   const allergiesInput = $('allergiesInput');
+  const seasoningsInput = $('seasoningsInput');
   const imageInput = $('imageInput');
   const loading = $('loading');
   const toastBanner = $('toastBanner');
@@ -972,11 +1036,15 @@
   allergiesInput.value = safeGetItem('APP_ALLERGIES', '');
   allergiesInput.addEventListener('input', () => safeSetItem('APP_ALLERGIES', allergiesInput.value.trim()));
 
+  seasoningsInput.value = safeGetItem('APP_SEASONINGS', '');
+  seasoningsInput.addEventListener('input', () => safeSetItem('APP_SEASONINGS', seasoningsInput.value.trim()));
+
   const styleBtns = document.querySelectorAll('.style-btn');
   function setMenuStyle(style) {
     currentStyle = style;
     safeSetItem('APP_MENU_STYLE', style);
     styleBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.style === style));
+    updateStyleNote();
   }
   setMenuStyle(safeGetItem('APP_MENU_STYLE', '一汁二菜'));
   styleBtns.forEach(btn => btn.addEventListener('click', () => setMenuStyle(btn.dataset.style)));
@@ -1348,8 +1416,91 @@
   });
 
   // ===== レシピ検索・作成 =====
+  const DEFAULT_SEASONINGS = '塩, こしょう, 醤油, 砂糖, みりん, 酒, 味噌, サラダ油';
+  let currentRecipes = [];
+
+  // --- 文字の正規化（カタカナ→ひらがな、全角英数→半角、小文字化） ---
+  function normalizeText(text) {
+    return String(text ?? '')
+      .replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
+      .replace(/[Ａ-Ｚａ-ｚ０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+      .toLowerCase()
+      .replace(/\s+/g, '');
+  }
+
+  function splitList(text) {
+    return String(text || '').split(/[,、，・\/\s]+/).map(t => t.trim()).filter(Boolean);
+  }
+
+  // --- アレルギー・除外食材のチェック ---
+  // 指定された語から、それを含む代表的な食品・加工品・調味料まで広げて照合する
+  // keys: この語が指定されたら words 全体で照合する（keys 以外の語が指定された場合はその語だけで照合）
+  // ※ ひらがな化して照合するため「パン」（フライパン）や「ルー」（ブルーベリー）のような短い語は入れない
+  const ALLERGY_GROUPS = [
+    { keys: ['卵', 'たまご', '玉子', '鶏卵'], words: ['卵', 'たまご', '玉子', '鶏卵', '卵黄', '卵白', 'マヨネーズ', 'オムレツ', 'オムライス', '親子丼', 'カステラ'] },
+    { keys: ['乳', '乳製品', '牛乳', 'ミルク'], words: ['乳製品', '牛乳', 'ミルク', 'バター', 'チーズ', '生クリーム', 'クリーム', 'ヨーグルト', '練乳', 'ホワイトソース', 'グラタン', '乳脂肪'] },
+    { keys: ['小麦', '小麦粉'], words: ['小麦', '薄力粉', '強力粉', 'パン粉', '食パン', 'うどん', 'パスタ', 'スパゲッティ', 'マカロニ', 'ラーメン', '中華麺', '焼きそば', '餃子の皮', 'ワンタン', 'カレールウ', 'カレールー', 'シチューのルウ', '天ぷら粉', 'お好み焼き粉', '醤油', 'しょうゆ', 'めんつゆ'] },
+    { keys: ['えび', '海老'], words: ['えび', '海老'] },
+    { keys: ['かに', '蟹'], words: ['かに', '蟹'] },
+    { keys: ['そば', '蕎麦'], words: ['そば粉', '蕎麦', 'ざるそば', 'かけそば', '年越しそば'] },
+    { keys: ['落花生', 'ピーナッツ', 'ピーナツ'], words: ['落花生', 'ピーナッツ', 'ピーナツ'] },
+    { keys: ['くるみ', '胡桃'], words: ['くるみ', '胡桃', 'ウォールナッツ'] },
+    { keys: ['大豆'], words: ['大豆', '豆腐', '油揚げ', '厚揚げ', '納豆', '豆乳', 'きな粉', '枝豆', '味噌', 'みそ', '醤油', 'しょうゆ', 'めんつゆ'] },
+    { keys: ['ごま', '胡麻'], words: ['ごま', '胡麻'] },
+    { keys: ['鶏肉', 'とり肉'], words: ['鶏肉', 'とり肉', '鶏もも', '鶏むね', 'ささみ', '手羽', '鶏ひき'] },
+    { keys: ['豚肉'], words: ['豚肉', '豚こま', '豚バラ', '豚ひき', 'ベーコン', 'ハム', 'ソーセージ'] },
+    { keys: ['牛肉'], words: ['牛肉', '牛こま', '牛バラ', '牛ひき', '合いびき', '合挽'] }
+  ].map(g => ({ keys: g.keys.map(normalizeText), words: g.words.map(normalizeText), rawWords: g.words }));
+
+  // 照合用（正規化済み）と、AIへの指示用（元の表記）の両方を返す
+  function expandAllergy(term) {
+    const t = normalizeText(term);
+    const terms = new Set([t]);
+    const display = new Set([term]);
+    ALLERGY_GROUPS.forEach(group => {
+      if (!group.keys.includes(t)) return;
+      group.words.forEach(w => terms.add(w));
+      group.rawWords.forEach(w => display.add(w));
+    });
+    return { terms: [...terms], display: [...display] };
+  }
+
+  function getAllergyRules() {
+    return splitList(allergiesInput.value).map(label => ({ label, ...expandAllergy(label) }));
+  }
+
+  // レシピ（料理名・材料・手順）に除外食材が含まれていないか照合
+  function findAllergyHits(recipe, rules) {
+    const fields = [recipe.title, ...(recipe.ingredients || []), ...(recipe.steps || [])];
+    const hits = [];
+    rules.forEach(rule => {
+      const found = new Set();
+      fields.forEach(field => {
+        const text = normalizeText(field);
+        rule.terms.forEach(term => {
+          if (term && text.includes(term)) found.add(term);
+        });
+      });
+      if (found.size) hits.push({ label: rule.label, words: [...found] });
+    });
+    return hits;
+  }
+
+  // --- 献立スタイルの表示 ---
+  function updateStyleNote() {
+    const note = $('currentStyleNote');
+    if (note) note.textContent = `献立スタイル: ${currentStyle}（⚙️設定で変更できます）`;
+  }
+
+  function getSeasonings() {
+    return seasoningsInput.value.trim() || DEFAULT_SEASONINGS;
+  }
+
   function recipeSignature(query) {
-    return JSON.stringify([query, currentStyle, allergiesInput.value.trim(), scannedItems.map(i => i.name + i.expiration_date)]);
+    return JSON.stringify([
+      query, currentStyle, allergiesInput.value.trim(), getSeasonings(),
+      scannedItems.map(i => i.name + i.expiration_date), !!apiKeyInput.value.trim()
+    ]);
   }
 
   async function requestRecipes(query) {
@@ -1363,24 +1514,21 @@
 
   navRecipeBtn.addEventListener('click', async () => {
     switchTab('recipe');
-    if (scannedItems.length > 0) {
-      if (!recipeKeywordInput.value.trim()) {
-        recipeKeywordInput.value = sortedItems().map(i => i.name).join('・');
-      }
-      const query = recipeKeywordInput.value.trim();
-      // 食材・条件が前回と同じなら再生成しない（API呼び出しの節約）
-      if (recipeSignature(query) === lastRecipeSignature && recipesContainer.innerHTML.trim()) return;
-      await requestRecipes(query);
-    } else {
+    const query = recipeKeywordInput.value.trim();
+    if (scannedItems.length === 0 && !query) {
       recipeKeywordInput.focus();
       if (!recipesContainer.innerHTML.trim()) runDemoRecipes('');
+      return;
     }
+    // 食材・条件が前回と同じなら再生成しない（API呼び出しの節約）
+    if (recipeSignature(query) === lastRecipeSignature && recipesContainer.innerHTML.trim()) return;
+    await requestRecipes(query);
   });
 
   async function executeRecipeSearch() {
     const query = recipeKeywordInput.value.trim();
     if (!query && scannedItems.length === 0) {
-      showNotice('検索したい食材名や料理のキーワードを入力してください。', true);
+      showNotice('食材リストが空です。スキャンするか、検索したい食材名・料理のキーワードを入力してください。', true);
       recipeKeywordInput.focus();
       return;
     }
@@ -1402,60 +1550,82 @@
     });
   });
 
+  // --- APIキーなし時のサンプル献立（食材リスト・スタイルに合わせて定型文で組み立て） ---
+  function buildDemoRecipes(searchQuery) {
+    const rules = getAllergyRules();
+    const isExcluded = (name) => rules.some(r => r.terms.some(t => normalizeText(name).includes(t)));
+    let names = sortedItems().map(i => i.name).filter(n => !isExcluded(n));
+    if (names.length === 0) names = ['キャベツ', 'にんじん', '玉ねぎ'].filter(n => !isExcluded(n));
+    if (names.length === 0) names = ['季節の野菜'];
+    const pick = (i) => names[i % names.length];
+    const join = (arr) => [...new Set(arr)].join('と');
+
+    const main = {
+      category_type: '主菜',
+      title: `${join([pick(0), pick(1)])}の甘辛炒め`,
+      cooking_time: 12,
+      ingredients: [...new Set([pick(0), pick(1)])].map(n => `${n} 適量`).concat(['醤油 大さじ1', 'みりん 大さじ1', 'サラダ油 小さじ1']),
+      steps: [`${join([pick(0), pick(1)])}を食べやすい大きさに切る。`, 'フライパンに油を熱し、火の通りにくいものから炒める。', '全体に火が通ったら醤油とみりんを加え、汁気を飛ばすように絡めて完成。']
+    };
+    const side = {
+      category_type: '副菜',
+      title: `${pick(2)}のさっぱり和え`,
+      cooking_time: 5,
+      ingredients: [`${pick(2)} 適量`, '醤油 小さじ1', '砂糖 ひとつまみ'],
+      steps: [`${pick(2)}を食べやすく切り、必要なら電子レンジ(600W)で1〜2分加熱する。`, '粗熱をとって水気を切る。', '醤油と砂糖で和えて器に盛る。']
+    };
+    const soupNames = [...new Set([pick(3), pick(1)])];
+    const soup = {
+      category_type: '汁物',
+      title: `${join(soupNames)}の味噌汁`,
+      cooking_time: 8,
+      ingredients: soupNames.map(n => `${n} 適量`).concat(['水 400ml', '味噌 大さじ1.5']),
+      steps: ['具材を食べやすい大きさに切る。', '鍋に水と具材を入れて中火で煮る。', '具材に火が通ったら火を止め、味噌を溶き入れる。']
+    };
+
+    if (currentStyle === '一汁一菜（時短）') {
+      return [
+        { ...main, category_type: 'メイン品' },
+        { ...soup, category_type: 'スープ・具だくさん汁', title: `${join(names.slice(0, 3))}の具だくさん味噌汁`, ingredients: names.slice(0, 3).map(n => `${n} 適量`).concat(['水 400ml', '味噌 大さじ1.5']) }
+      ];
+    }
+    if (currentStyle === 'おつまみセット') {
+      return [
+        { ...side, category_type: 'おつまみ品' },
+        { ...main, category_type: 'おつまみ品', title: `${pick(0)}のカリッと焼き`, ingredients: [`${pick(0)} 適量`, '塩 少々', 'こしょう 少々', 'サラダ油 小さじ1'], steps: [`${pick(0)}を一口大に切り、塩こしょうを振る。`, 'フライパンに油を熱し、表面がカリッとするまで焼いて完成。'] }
+      ];
+    }
+    return [main, side, soup];
+  }
+
   function runDemoRecipes(searchQuery = '') {
     setBusy(true);
     setTimeout(() => {
+      const recipes = buildDemoRecipes(searchQuery);
+      const totalTime = Math.max(...recipes.map(r => r.cooking_time)) + 5;
       const demoRes = {
         menu_summary: {
-          style_name: searchQuery ? `「${searchQuery}」の検索結果（サンプル）` : `${currentStyle}（サンプル）`,
-          summary_text: searchQuery
-            ? `キーワード「${searchQuery}」に合わせたサンプル献立です。⚙️からAPIキーを設定するとAIが実際に献立を考えます。`
-            : '超優先の鶏もも肉とほうれん草を使い切る、栄養満点のレスキュー献立です！（サンプル）',
-          total_time_minutes: 20
+          style_name: `${searchQuery ? `「${searchQuery}」` : currentStyle}のサンプル献立`,
+          summary_text: '定型パターンで組み立てたサンプルです。⚙️からGemini APIキーを設定すると、AIが食材に合わせて本格的な献立を考えます。',
+          total_time_minutes: totalTime
         },
-        recipes: [
-          {
-            category_type: '主菜',
-            title: '鶏もも肉としめじのガリバタ醤油ソテー',
-            cooking_time: 12,
-            ingredients: ['鶏もも肉 300g', 'しめじ 1/2パック', 'バター 10g', '醤油 大さじ1.5'],
-            steps: ['鶏もも肉は一口大に切り、塩こしょうを振る。', 'フライパンで鶏肉を皮目から焼き、火が通ったらほぐしたしめじを加える。', 'バターと醤油を回しかけ、全体に絡めたら完成。']
-          },
-          {
-            category_type: '副菜',
-            title: 'ほうれん草のさっぱり胡麻和え',
-            cooking_time: 5,
-            ingredients: ['ほうれん草 1束', 'すりごま 大さじ2', 'めんつゆ 大さじ1'],
-            steps: ['ほうれん草をラップで包み、600Wのレンジで2分加熱する。', '冷水にとって水気を絞り、3cm幅に切る。', 'すりごまとめんつゆで和えて器に盛る。']
-          },
-          {
-            category_type: '汁物',
-            title: '木綿豆腐としめじのほっこり味噌汁',
-            cooking_time: 6,
-            ingredients: ['木綿豆腐 1/2丁', 'しめじ 1/2パック', 'だし汁 400ml', '味噌 大さじ1.5'],
-            steps: ['鍋にだし汁としめじを入れて中火で煮る。', 'さいの目切りにした木綿豆腐を加え、ひと煮立ちさせる。', '火を止めて味噌を溶き入れる。']
-          }
-        ],
-        preservation_guides: [
-          {
-            ingredient_name: '木綿豆腐（残り1/2丁）',
-            title: '水を張った保存容器で冷蔵保存',
-            instruction: '清潔な保存容器に豆腐を入れ、かぶるくらいの水を注いでフタをし冷蔵庫へ。毎日水を替えると3〜4日鮮度を保てます。'
-          }
-        ]
+        recipes,
+        preservation_guides: []
       };
       renderRecipeResults(demoRes);
       lastRecipeSignature = recipeSignature(searchQuery);
+      saveLastRecipes(demoRes);
       setBusy(false);
     }, 450);
   }
 
-  async function generateRecipes(searchQuery = '') {
-    setBusy(true, '⏳ AIが献立を考え中...');
+  async function generateRecipes(searchQuery = '', isRetry = false) {
+    setBusy(true, isRetry ? '⏳ 除外食材を避けて作り直し中...' : '⏳ AIが献立を考え中...');
+    let retryNeeded = false;
     try {
-      const allergies = allergiesInput.value.trim();
-      const allergyConstraint = allergies
-        ? `【絶対禁止・除外食材】: ${allergies}（これらを含む食材・調味料・加工品は一切使わないこと）`
+      const rules = getAllergyRules();
+      const allergyConstraint = rules.length
+        ? `【絶対禁止・除外食材】: ${rules.map(r => `${r.label}（${r.display.join('、')} などを含む）`).join(' / ')}。これらを含む食材・調味料・加工品は一切使わないこと。`
         : '';
 
       let styleInstruction;
@@ -1468,23 +1638,25 @@
       }
 
       const searchConstraint = searchQuery
-        ? `【検索キーワード・リクエスト】: 「${searchQuery}」に関連するレシピを優先して提案してください。`
+        ? `【検索キーワード・リクエスト】: 「${searchQuery}」に関連するレシピにしてください（献立の構成は上記を守ること）。`
         : '';
 
       const itemsText = scannedItems.length > 0
         ? sortedItems().map(i => {
             const d = daysLeft(i);
-            return `【${priorityOf(d)}】 ${i.name} (${i.quantity || '適量'}, ${expirationLabel(d)})`;
+            return `【${priorityOf(d)}】 ${i.name} (${i.quantity || '量不明'}, ${expirationLabel(d)})`;
           }).join('\n')
-        : '指定なし（検索キーワードの食材を中心に一般的な家庭の調味料を使用）';
+        : 'なし（検索キーワードの食材を中心に考えること）';
 
       const prompt = [
-        `指定された献立スタイル「${currentStyle}」と検索リクエストに沿ってメニューを提案してください。`,
+        `献立スタイル「${currentStyle}」でメニューを提案してください。`,
         styleInstruction,
         searchConstraint,
         '【超優先】の食材がある場合は最優先で使い切ってください。期限を過ぎた食材は加熱調理に限定し、傷んでいないか確認するよう手順に記載してください。',
+        `【使える調味料・常備品】: ${getSeasonings()}。これ以外の調味料や、手持ち食材リストにない食材が必要な場合は、ingredientsの該当項目の末尾に「（買い足し）」と付けてください。`,
         '材料には分量も記載し、手順は家庭で再現できる具体的な内容にしてください。',
-        'preservation_guidesには、献立で使い切れずに余る食材の長持ちする保存方法を書いてください。',
+        'used_inventory_itemsには、そのレシピで使う手持ち食材の名前を、手持ち食材リストの表記のまま入れてください。',
+        'preservation_guidesには、献立で使い切れずに余る手持ち食材の長持ちする保存方法を書いてください。',
         allergyConstraint,
         '手持ち食材リスト:',
         itemsText
@@ -1511,7 +1683,8 @@
                 title: { type: 'STRING' },
                 cooking_time: { type: 'INTEGER' },
                 ingredients: { type: 'ARRAY', items: { type: 'STRING' } },
-                steps: { type: 'ARRAY', items: { type: 'STRING' } }
+                steps: { type: 'ARRAY', items: { type: 'STRING' } },
+                used_inventory_items: { type: 'ARRAY', items: { type: 'STRING' } }
               },
               required: ['category_type', 'title', 'ingredients', 'steps']
             }
@@ -1532,31 +1705,74 @@
         required: ['menu_summary', 'recipes', 'preservation_guides']
       });
 
+      // 除外食材が混入していたら1回だけ自動で作り直す
+      const hasHits = rules.length && (parsed.recipes || []).some(r => findAllergyHits(r, rules).length);
+      if (hasHits && !isRetry) {
+        retryNeeded = true;
+        return;
+      }
+
       renderRecipeResults(parsed);
       lastRecipeSignature = recipeSignature(searchQuery);
+      saveLastRecipes(parsed);
     } catch (err) {
       showNotice('献立作成エラー: ' + err.message, true);
     } finally {
       setBusy(false);
+      if (retryNeeded) await generateRecipes(searchQuery, true);
     }
+  }
+
+  // --- 前回の献立を保存・復元 ---
+  function saveLastRecipes(res) {
+    safeSetItem('APP_LAST_RECIPES', JSON.stringify({ res, signature: lastRecipeSignature }));
+  }
+  function restoreLastRecipes() {
+    try {
+      const saved = JSON.parse(safeGetItem('APP_LAST_RECIPES', 'null'));
+      if (!saved || !saved.res) return;
+      renderRecipeResults(saved.res, { switchToRecipe: false, updateHero: false });
+      lastRecipeSignature = saved.signature || '';
+    } catch (e) { /* 壊れたデータは無視 */ }
+  }
+
+  // --- レシピで使う手持ち食材を特定（AIの申告 + 名前の照合） ---
+  function usedInventoryNames(recipe) {
+    const names = new Set();
+    const declared = (recipe.used_inventory_items || []).map(normalizeText);
+    const text = normalizeText([recipe.title, ...(recipe.ingredients || [])].join(' '));
+    scannedItems.forEach(item => {
+      const n = normalizeText(item.name);
+      if (declared.some(d => d === n || d.includes(n) || n.includes(d)) || text.includes(n)) names.add(item.name);
+    });
+    return [...names];
   }
 
   // ===== レシピ結果の描画（全てエスケープ済み） =====
   const BADGE_CLASSES = ['主菜', 'メイン品', '副菜', 'おつまみ品', '汁物', 'スープ・具だくさん汁'];
 
-  function renderRecipeResults(res) {
+  function renderIngredient(text) {
+    const s = String(text ?? '');
+    return /買い足し/.test(s)
+      ? `<li class="need-buy">🛒 ${escapeHtml(s)}</li>`
+      : `<li>${escapeHtml(s)}</li>`;
+  }
+
+  function renderRecipeResults(res, { switchToRecipe = true, updateHero = true } = {}) {
     const summary = res.menu_summary || {};
     const styleName = escapeHtml(summary.style_name || currentStyle);
     const totalTime = Number(summary.total_time_minutes) || 0;
     const summaryText = escapeHtml(summary.summary_text || '');
     const timeLabel = totalTime ? `約${totalTime}分` : '';
 
-    heroContent.innerHTML = `
-      <div style="text-align:left; width:100%;">
-        <div style="font-weight:bold; color:var(--primary); margin-bottom:4px;">✨ ${styleName}${timeLabel ? ` (${timeLabel})` : ''}</div>
-        <div style="font-size:0.9rem;">${summaryText}</div>
-      </div>
-    `;
+    if (updateHero) {
+      heroContent.innerHTML = `
+        <div style="text-align:left; width:100%;">
+          <div style="font-weight:bold; color:var(--primary); margin-bottom:4px;">✨ ${styleName}${timeLabel ? ` (${timeLabel})` : ''}</div>
+          <div style="font-size:0.9rem;">${summaryText}</div>
+        </div>
+      `;
+    }
 
     $('menuSummaryBox').innerHTML = `
       <div class="recipe-card" style="background: var(--primary-light); border-color: var(--primary);">
@@ -1565,20 +1781,37 @@
       </div>
     `;
 
-    const recipes = Array.isArray(res.recipes) ? res.recipes : [];
-    recipesContainer.innerHTML = recipes.length ? recipes.map(r => {
+    const rules = getAllergyRules();
+    $('allergyDisclaimer').style.display = rules.length ? 'block' : 'none';
+
+    currentRecipes = Array.isArray(res.recipes) ? res.recipes : [];
+    let hitCount = 0;
+    recipesContainer.innerHTML = currentRecipes.length ? currentRecipes.map((r, index) => {
       const category = String(r.category_type || '');
       const badgeClass = BADGE_CLASSES.includes(category) ? `badge-${category}` : '';
+      const hits = findAllergyHits(r, rules);
+      if (hits.length) hitCount++;
+      const warning = hits.length
+        ? `<div class="allergy-warning" role="alert">⚠️ 除外指定の食材が含まれている可能性があります：${hits.map(h => `${escapeHtml(h.label)}（${h.words.map(escapeHtml).join('・')}）`).join(' / ')}</div>`
+        : '';
+      const used = usedInventoryNames(r);
+      const usedHtml = used.length
+        ? `<div class="used-items">🥬 使う手持ち食材: ${used.map(escapeHtml).join('・')}</div>
+           <button type="button" class="cooked-btn" data-index="${index}">🍳 作った！（使った食材をリストから外す）</button>`
+        : '';
       return `
         <div class="recipe-card">
           <span class="recipe-badge ${badgeClass}">${escapeHtml(category)}</span>
           <h3 class="recipe-title">${escapeHtml(r.title)}</h3>
-          <div style="font-size: 0.85rem; color: var(--text-sub); margin-bottom: 8px;">
-            ⏱️ ${Number(r.cooking_time) || 10}分 | 食材: ${(r.ingredients || []).map(escapeHtml).join(', ')}
-          </div>
+          ${warning}
+          <div style="font-size: 0.85rem; color: var(--text-sub); margin-bottom: 4px;">⏱️ ${Number(r.cooking_time) || 10}分</div>
+          <div style="font-weight: bold; font-size: 0.85rem;">材料</div>
+          <ul class="ingredient-list">${(r.ingredients || []).map(renderIngredient).join('')}</ul>
+          <div style="font-weight: bold; font-size: 0.85rem;">作り方</div>
           <ol class="step-list">
             ${(r.steps || []).map(s => `<li>${escapeHtml(s)}</li>`).join('')}
           </ol>
+          ${usedHtml}
         </div>
       `;
     }).join('') : '<p style="color: var(--text-sub);">レシピが見つかりませんでした。キーワードを変えてお試しください。</p>';
@@ -1589,14 +1822,37 @@
         <strong>🧊 ${escapeHtml(p.ingredient_name)}: ${escapeHtml(p.title)}</strong>
         <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: var(--text-sub);">${escapeHtml(p.instruction)}</p>
       </div>
-    `).join('') || '<p style="color: var(--text-sub);">余る食材はありません 🎉</p>';
+    `).join('') || '<p style="color: var(--text-sub);">保存法の提案はありません。</p>';
 
-    switchTab('recipe');
+    if (switchToRecipe) {
+      switchTab('recipe');
+      if (hitCount) showNotice(`⚠️ ${hitCount}件のレシピに除外指定の食材が含まれている可能性があります。内容を確認してください。`, true);
+    }
   }
+
+  // 「作った！」：使った手持ち食材をリストから外す
+  recipesContainer.addEventListener('click', (e) => {
+    const btn = e.target.closest('.cooked-btn');
+    if (!btn) return;
+    const recipe = currentRecipes[Number(btn.dataset.index)];
+    if (!recipe) return;
+    const used = usedInventoryNames(recipe);
+    if (used.length === 0) {
+      showNotice('このレシピの食材はすでにリストにありません');
+      btn.disabled = true;
+      return;
+    }
+    if (!confirm(`「${recipe.title}」を作りました。\n次の食材を食材リストから外しますか？\n\n${used.join('\n')}\n\n※ 残っている食材は、あとで手動で追加し直せます。`)) return;
+    setItems(scannedItems.filter(i => !used.includes(i.name)));
+    btn.disabled = true;
+    btn.textContent = '✓ 作りました';
+    showNotice(`${used.length}件の食材をリストから外しました。おいしく召し上がれ！`);
+  });
 
   // ===== 初期化 =====
   scannedItems = loadItems();
   renderTable();
+  restoreLastRecipes();
   if (scannedItems.length > 0) {
     const urgent = scannedItems.filter(i => daysLeft(i) <= 1).length;
     if (urgent > 0) showNotice(`⚠️ 期限が明日までの食材が${urgent}件あります。早めに使い切りましょう！`);
