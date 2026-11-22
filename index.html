@@ -7,7 +7,9 @@
 
   <!-- PWA設定 -->
   <meta name="description" content="レシートや冷蔵庫を撮影して食材の賞味期限を管理し、期限が近い食材を使い切る献立をAIが提案します。">
-  <meta name="theme-color" content="#2e7d32">
+  <meta name="theme-color" content="#2e7d32" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
@@ -90,15 +92,38 @@
     /* 通知バナー */
     .toast-banner {
       display: none;
+      position: fixed;
+      left: 16px;
+      right: 16px;
+      bottom: calc(88px + env(safe-area-inset-bottom));
+      max-width: 468px;
+      margin: 0 auto;
+      z-index: 150;
       background-color: #323232;
       color: #fff;
       padding: 12px 16px;
       border-radius: 10px;
-      margin-bottom: 16px;
       font-size: 0.9rem;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
       animation: fadeIn 0.2s ease-out;
+      align-items: center;
+      gap: 12px;
     }
+    .toast-banner.show { display: flex; }
+    .toast-text { flex: 1; }
+    .toast-action {
+      background: none;
+      border: 1.5px solid currentColor;
+      color: #a5d6a7;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-weight: bold;
+      font-size: 0.85rem;
+      cursor: pointer;
+      white-space: nowrap;
+      min-height: 36px;
+    }
+    .toast-banner.error .toast-action { color: #fff; }
     .toast-banner.error {
       background-color: var(--danger);
     }
@@ -198,6 +223,80 @@
     .tag-優先 { background-color: var(--warning); }
     .tag-注意 { background-color: #0288d1; }
     .tag-通常 { background-color: #757575; }
+    .tag-期限切れ { background-color: #7f0000; }
+    .fridge-table tr.expired td { background-color: #fff1f1; }
+
+    .item-edit-btn {
+      background: none;
+      border: none;
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+      padding: 0;
+      width: 100%;
+      text-align: center;
+    }
+    .item-edit-btn small { color: var(--text-sub); }
+    .edit-hint { font-size: 0.7rem; color: var(--text-sub); }
+    .empty-row td {
+      color: var(--text-sub);
+      font-size: 0.85rem;
+      padding: 14px 10px;
+    }
+
+    /* スキャン結果の確認 */
+    .review-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border-soft, #e0e0e0);
+    }
+    .review-row input[type="checkbox"] { width: 22px; height: 22px; flex-shrink: 0; }
+    .review-row input[type="text"] { flex: 2; min-height: 40px; padding: 6px 8px; font-size: 0.9rem; }
+    .review-row input[type="date"] {
+      flex: 1.4;
+      min-width: 0;
+      min-height: 40px;
+      padding: 6px;
+      border: 2px solid #b0bec5;
+      border-radius: 10px;
+      font-size: 0.85rem;
+    }
+    .review-row.unchecked input[type="text"], .review-row.unchecked input[type="date"] { opacity: 0.4; }
+    .modal-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+    .danger-text-btn {
+      background: none;
+      border: 1.5px solid var(--danger);
+      color: var(--danger);
+      border-radius: 12px;
+      padding: 12px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+    .menu-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .menu-actions button {
+      flex: 1;
+      background: var(--card-bg);
+      color: var(--primary);
+      border: 1.5px solid var(--primary);
+      border-radius: 10px;
+      padding: 8px;
+      font-weight: bold;
+      font-size: 0.85rem;
+      cursor: pointer;
+      min-height: 40px;
+    }
+    .settings-preview {
+      margin-top: 10px;
+      padding: 10px 12px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      color: var(--text-sub);
+    }
 
     /* レシピ表示セクション */
     .recipe-section {
@@ -544,11 +643,45 @@
     }
 
     .loading {
-      text-align: center;
       display: none;
-      padding: 16px;
-      font-weight: bold;
+      position: fixed;
+      top: calc(12px + env(safe-area-inset-top));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 160;
+      align-items: center;
+      gap: 10px;
+      background: var(--card-bg);
       color: var(--primary);
+      border: 1.5px solid var(--primary);
+      border-radius: 999px;
+      padding: 8px 10px 8px 16px;
+      font-weight: bold;
+      font-size: 0.9rem;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+      max-width: calc(100% - 32px);
+      white-space: nowrap;
+    }
+    .loading.show { display: flex; }
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 3px solid var(--primary-light);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-cancel {
+      background: none;
+      border: 1px solid var(--text-sub);
+      color: var(--text-sub);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      min-height: 32px;
     }
 
     button:disabled {
@@ -588,7 +721,7 @@
       flex-wrap: wrap;
     }
     .manual-add-row input[type="text"] {
-      flex: 2 1 140px;
+      flex: 2 1 120px;
       min-height: 44px;
       padding: 8px 10px;
       font-size: 0.95rem;
@@ -670,6 +803,45 @@
       body { padding-top: calc(16px + env(safe-area-inset-top)); }
     }
 
+    /* ===== ダークモード ===== */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --primary: #81c784;
+        --primary-light: #1c3320;
+        --bg: #121212;
+        --card-bg: #1e1e1e;
+        --text-main: #e8eaed;
+        --text-sub: #b0bec5;
+        --danger: #ef5350;
+        --warning: #ffa726;
+        --table-border: #6d3a3a;
+        --border-soft: #333;
+      }
+      .settings-icon-btn, .nav-btn { color: #e8eaed; }
+      .settings-icon-btn:active, .nav-btn:active { background-color: #2a2a2a; }
+      .nav-btn.active { color: var(--primary); }
+      .hero-box { background-color: #1a1a1a; border-color: #555; }
+      .fridge-table th { background-color: #2a1818; color: #ef9a9a; }
+      .fridge-table tr.expired td { background-color: #2c1515; }
+      .recipe-card, .modal-content, .bottom-nav { background: var(--card-bg); border-color: #333; }
+      .bottom-nav { border-top-color: #333; }
+      .recipe-search-panel, .manual-add-panel, .settings-preview { background: #1a1d21; border-color: #333; }
+      .quick-tag-btn, .row-delete-btn { background: #24272b; border-color: #444; color: var(--text-sub); }
+      .secondary-action-btn, .selector-btn, .close-btn { background: #2a2a2a; color: var(--text-main); border-color: #444; }
+      .primary-action-btn, .search-exec-btn, .selector-btn.active, .update-banner button { background: #2e7d32; color: #fff; border-color: #2e7d32; }
+      .tag-超優先 { background-color: #c62828; }
+      .tag-優先 { background-color: #e65100; }
+      .recipe-badge { color: #fff; }
+      input[type="text"], input[type="password"], input[type="date"],
+      .search-input-row input, .manual-add-row input[type="date"], .review-row input[type="date"] {
+        background: #1a1a1a; color: var(--text-main); border-color: #555;
+      }
+      .allergy-warning { background: #3b1414; color: #ffcdd2; }
+      .offline-badge { background: #3a2a10; color: #ffcc80; border-color: #6d4c1f; }
+      .demo-btn, .cooked-btn { background: #1c3320; }
+      .need-buy { color: #ffb74d; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       * { animation: none !important; transition: none !important; }
     }
@@ -695,10 +867,18 @@
     <button type="button" id="updateReloadBtn">更新する</button>
   </div>
 
-  <!-- 通知メッセージ表示エリア -->
-  <div id="toastBanner" class="toast-banner" role="alert"></div>
+  <!-- 通知メッセージ表示エリア（画面下部に固定） -->
+  <div id="toastBanner" class="toast-banner" role="alert">
+    <span id="toastText" class="toast-text"></span>
+    <button type="button" id="toastAction" class="toast-action" style="display: none;"></button>
+  </div>
 
-  <div id="loading" class="loading" role="status" aria-live="polite">⏳ AIが解析・献立作成中...</div>
+  <!-- ローディング（画面上部に固定） -->
+  <div id="loading" class="loading" role="status" aria-live="polite">
+    <span class="spinner" aria-hidden="true"></span>
+    <span id="loadingText">AIが解析中...</span>
+    <button type="button" id="loadingCancelBtn" class="loading-cancel" style="display: none;">中止</button>
+  </div>
 
   <!-- ホームビュー -->
   <main id="homeView">
@@ -733,6 +913,7 @@
       <div style="font-weight: bold; font-size: 0.9rem; margin-bottom: 8px;">✏️ 食材を手動で追加</div>
       <form id="manualAddForm" class="manual-add-row">
         <input type="text" id="manualNameInput" placeholder="食材名 (例: 牛乳)" aria-label="食材名" required>
+        <input type="text" id="manualQtyInput" placeholder="数量 (任意)" aria-label="数量" style="flex: 1 1 80px;">
         <input type="date" id="manualDateInput" aria-label="賞味期限" required>
         <button type="submit" class="search-exec-btn">追加</button>
       </form>
@@ -843,7 +1024,7 @@
       <button type="button" class="selector-btn font-size-btn" data-size="18px">大</button>
       <button type="button" class="selector-btn font-size-btn" data-size="21px">特大</button>
     </div>
-    <div style="margin-top: 10px; padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 0.95rem; color: var(--text-sub);">
+    <div class="settings-preview">
       プレビュー表示：文字の大きさがこのように変わります。
     </div>
 
@@ -851,6 +1032,45 @@
       <label style="margin-top: 0;">📲 ホーム画面に追加</label>
       <button type="button" id="installBtn" class="primary-action-btn" style="display: none;">アプリとしてインストール</button>
       <p id="installHint" class="install-hint"></p>
+    </div>
+  </div>
+</div>
+
+<!-- 食材編集モーダル -->
+<div id="itemEditModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="itemEditTitle">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 id="itemEditTitle" style="margin: 0; font-size: 1.15rem;">✏️ 食材を編集</h2>
+      <button type="button" id="closeItemEditBtn" class="close-btn">閉じる</button>
+    </div>
+    <form id="itemEditForm">
+      <label for="editNameInput">食材名</label>
+      <input type="text" id="editNameInput" required>
+      <label for="editQtyInput">数量</label>
+      <input type="text" id="editQtyInput" placeholder="例: 300g、1パック">
+      <label for="editDateInput">賞味期限</label>
+      <input type="date" id="editDateInput" required style="width: 100%; min-height: 48px; padding: 10px; border: 2px solid #b0bec5; border-radius: 10px; font-size: 1rem;">
+      <div class="modal-actions">
+        <button type="submit" class="primary-action-btn">保存する</button>
+        <button type="button" id="editDeleteBtn" class="danger-text-btn">この食材を削除</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- スキャン結果の確認モーダル -->
+<div id="scanReviewModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="scanReviewTitle">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 id="scanReviewTitle" style="margin: 0; font-size: 1.15rem;">🧾 読み取り結果の確認</h2>
+      <button type="button" id="closeScanReviewBtn" class="close-btn">やめる</button>
+    </div>
+    <p style="margin: 0 0 8px 0; font-size: 0.85rem; color: var(--text-sub);">
+      間違っている食材はチェックを外すか、名前・期限を直してから追加してください。
+    </p>
+    <div id="scanReviewList"></div>
+    <div class="modal-actions">
+      <button type="button" id="scanReviewConfirmBtn" class="primary-action-btn">選択した食材を追加</button>
     </div>
   </div>
 </div>
@@ -913,6 +1133,9 @@
   let toastTimeout = null;
   let mediaStream = null;
   let lastRecipeSignature = ''; // 前回献立を作った時の食材+設定
+  let activeRequest = null;     // 実行中のAI通信（中止用の AbortController）
+  let currentMenuRes = null;    // 表示中の献立（共有用）
+  const REQUEST_TIMEOUT_MS = 60000;
 
   // ===== ユーティリティ =====
   function safeGetItem(key, fallback = '') {
@@ -951,6 +1174,7 @@
   }
 
   function priorityOf(days) {
+    if (days < 0) return '期限切れ';
     if (days <= 1) return '超優先';
     if (days <= 2) return '優先';
     if (days <= 4) return '注意';
@@ -986,6 +1210,28 @@
     saveItems();
     renderTable();
   }
+
+  // 削除系の操作は「元に戻す」付きの通知を出す
+  function setItemsWithUndo(items, message) {
+    const snapshot = scannedItems.map(i => ({ ...i }));
+    setItems(items);
+    showNotice(message, false, {
+      label: '元に戻す',
+      onClick: () => {
+        setItems(snapshot);
+        showNotice('元に戻しました');
+      }
+    });
+  }
+
+  // ホーム画面アイコンに「期限が明日まで（期限切れ含む）」の件数をバッジ表示
+  function updateAppBadge() {
+    const urgent = scannedItems.filter(i => daysLeft(i) <= 1).length;
+    try {
+      if (urgent > 0 && navigator.setAppBadge) navigator.setAppBadge(urgent).catch(() => {});
+      else if (navigator.clearAppBadge) navigator.clearAppBadge().catch(() => {});
+    } catch (e) { /* 非対応環境 */ }
+  }
   // 同名の食材は新しい情報で上書きしつつマージ
   function mergeItems(newItems) {
     const map = new Map(scannedItems.map(i => [i.name, i]));
@@ -994,22 +1240,37 @@
   }
 
   // ===== トースト通知 =====
-  function showNotice(message, isError = false) {
-    toastBanner.textContent = message;
-    toastBanner.className = isError ? 'toast-banner error' : 'toast-banner';
-    toastBanner.style.display = 'block';
+  function hideNotice() {
+    toastBanner.classList.remove('show');
+  }
+  function showNotice(message, isError = false, action = null) {
+    $('toastText').textContent = message;
+    toastBanner.className = isError ? 'toast-banner error show' : 'toast-banner show';
+    const actionBtn = $('toastAction');
+    if (action) {
+      actionBtn.textContent = action.label;
+      actionBtn.style.display = 'block';
+      actionBtn.onclick = () => { hideNotice(); action.onClick(); };
+    } else {
+      actionBtn.style.display = 'none';
+      actionBtn.onclick = null;
+    }
     if (toastTimeout) clearTimeout(toastTimeout);
-    toastTimeout = setTimeout(() => { toastBanner.style.display = 'none'; }, isError ? 7000 : 4500);
+    toastTimeout = setTimeout(hideNotice, action ? 8000 : isError ? 7000 : 4500);
   }
 
   // ===== ローディング（二重送信防止） =====
   const busyButtons = () => [navRecipeBtn, navCameraBtn, recipeSearchBtn, $('runDemoBtn'), ...document.querySelectorAll('.quick-tag-btn')];
-  function setBusy(busy, message = '⏳ AIが解析・献立作成中...') {
+  function setBusy(busy, message = '処理中...', { cancellable = false } = {}) {
     isBusy = busy;
-    loading.textContent = message;
-    loading.style.display = busy ? 'block' : 'none';
+    $('loadingText').textContent = message;
+    $('loadingCancelBtn').style.display = busy && cancellable ? 'block' : 'none';
+    loading.classList.toggle('show', busy);
     busyButtons().forEach(btn => { if (btn) btn.disabled = busy; });
   }
+  $('loadingCancelBtn').addEventListener('click', () => {
+    if (activeRequest) activeRequest.abort();
+  });
 
   // ===== モーダル =====
   function openModal(modal) {
@@ -1027,6 +1288,8 @@
     if (e.key !== 'Escape') return;
     if (settingsModal.style.display === 'flex') closeSettings();
     if (cameraModal.style.display === 'flex') closeCameraModal();
+    if ($('itemEditModal').style.display === 'flex') closeItemEdit();
+    if ($('scanReviewModal').style.display === 'flex') closeScanReview();
   });
 
   // ===== 設定値の復元・保存 =====
@@ -1206,42 +1469,77 @@
   });
 
   // ===== Gemini API 共通呼び出し =====
-  async function callGemini(parts, responseSchema) {
+  class CancelledError extends Error {}
+
+  async function callGemini(parts, responseSchema, { thinkingBudget } = {}) {
     if (!navigator.onLine) throw new Error('オフラインです。インターネットに接続してから再試行してください。');
     const apiKey = apiKeyInput.value.trim();
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey // URLに含めずヘッダーで送る（履歴・ログへの漏洩防止）
-      },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts }],
-        generationConfig: { responseMimeType: 'application/json', responseSchema }
-      })
-    });
+    const generationConfig = { responseMimeType: 'application/json', responseSchema };
+    if (thinkingBudget !== undefined) generationConfig.thinkingConfig = { thinkingBudget };
 
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      if (res.status === 400 && /API key/i.test(errData.error?.message || '')) {
-        throw new Error('APIキーが正しくありません。⚙️設定から確認してください。');
-      }
-      if (res.status === 429) throw new Error('利用上限に達しました。しばらく待ってから再試行してください。');
-      throw new Error(errData.error?.message || `HTTP ${res.status}`);
-    }
+    const controller = new AbortController();
+    activeRequest = controller;
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, REQUEST_TIMEOUT_MS);
 
-    const data = await res.json();
-    const candidate = data.candidates?.[0];
-    const text = candidate?.content?.parts?.map(p => p.text || '').join('');
-    if (!text) {
-      const reason = data.promptFeedback?.blockReason || candidate?.finishReason || '不明';
-      throw new Error(`AIから結果が返りませんでした（理由: ${reason}）`);
-    }
     try {
-      return JSON.parse(text);
-    } catch (e) {
-      throw new Error('AIの応答を解析できませんでした。もう一度お試しください。');
+      for (let attempt = 0; ; attempt++) {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey // URLに含めずヘッダーで送る（履歴・ログへの漏洩防止）
+          },
+          body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig }),
+          signal: controller.signal
+        });
+
+        // サーバー混雑（500番台）は少し待って1回だけ自動で再試行
+        if (res.status >= 500 && attempt === 0) {
+          await new Promise(r => setTimeout(r, 2000));
+          if (controller.signal.aborted) throw new DOMException('aborted', 'AbortError');
+          continue;
+        }
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          const msg = errData.error?.message || '';
+          if (res.status === 400 && /API key/i.test(msg)) throw new Error('APIキーが正しくありません。⚙️設定から確認してください。');
+          if (res.status === 403) throw new Error('このAPIキーでは利用できません。キーの権限や有効化の設定を確認してください。');
+          if (res.status === 429) throw new Error('利用上限に達しました。しばらく待ってから再試行してください。');
+          if (res.status >= 500) throw new Error('AIサーバーが混み合っています。少し時間をおいて再試行してください。');
+          throw new Error(msg || `HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        const candidate = data.candidates?.[0];
+        const text = candidate?.content?.parts?.filter(p => !p.thought).map(p => p.text || '').join('');
+        if (!text) {
+          const reason = data.promptFeedback?.blockReason || candidate?.finishReason || '不明';
+          throw new Error(`AIから結果が返りませんでした（理由: ${reason}）`);
+        }
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          throw new Error('AIの応答を解析できませんでした。もう一度お試しください。');
+        }
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        if (timedOut) throw new Error('応答に時間がかかりすぎたため中断しました。電波の良い場所で再試行してください。');
+        throw new CancelledError('中止しました');
+      }
+      if (err instanceof TypeError) throw new Error('通信に失敗しました。インターネット接続を確認してください。');
+      throw err;
+    } finally {
+      clearTimeout(timer);
+      if (activeRequest === controller) activeRequest = null;
     }
+  }
+
+  function handleAiError(prefix, err) {
+    if (err instanceof CancelledError) showNotice('中止しました');
+    else showNotice(`${prefix}: ${err.message}`, true);
   }
 
   // ===== スキャン処理 =====
@@ -1268,7 +1566,7 @@
   }
 
   async function scanImage(base64Image) {
-    setBusy(true, '⏳ AIが画像を解析中...');
+    setBusy(true, 'AIが画像を解析中...', { cancellable: true });
     try {
       const today = toLocalDateString(new Date());
       const prompt = `本日日付:${today}。画像（レシート・冷蔵庫内・食品パッケージ）から食材を抽出してください。
@@ -1294,7 +1592,8 @@
             }
           },
           required: ['items']
-        }
+        },
+        { thinkingBudget: 0 } // 読み取りは思考不要 → 応答を高速化
       );
 
       const items = (parsed.items || [])
@@ -1309,10 +1608,9 @@
         showNotice('食材を読み取れませんでした。明るい場所で、レシートや食材全体が写るように撮影してください。', true);
         return;
       }
-      mergeItems(items);
-      showNotice(`${items.length}件の食材を読み取りました！`);
+      openScanReview(items);
     } catch (err) {
-      showNotice('スキャン失敗: ' + err.message, true);
+      handleAiError('スキャン失敗', err);
     } finally {
       setBusy(false);
     }
@@ -1361,7 +1659,11 @@
     const items = sortedItems();
     let rowsHtml = '';
 
-    for (let i = 0; i < Math.max(items.length, minRows); i++) {
+    if (items.length === 0) {
+      rowsHtml += '<tr class="empty-row"><td colspan="3">まだ食材がありません。<br>下の 📷 スキャン か「食材を手動で追加」から登録しましょう。</td></tr>';
+    }
+    const rowCount = items.length === 0 ? minRows - 1 : Math.max(items.length, minRows);
+    for (let i = 0; i < rowCount; i++) {
       const item = items[i];
       if (!item) {
         rowsHtml += '<tr><td></td><td></td><td></td></tr>';
@@ -1369,14 +1671,20 @@
       }
       const days = daysLeft(item);
       const priority = priorityOf(days);
+      const name = escapeHtml(item.name);
       const expiredStyle = days < 0 ? ' style="color: var(--danger); font-weight: bold;"' : '';
       rowsHtml += `
-        <tr>
-          <td><strong>${escapeHtml(item.name)}</strong><br><small>${escapeHtml(item.quantity)}</small></td>
+        <tr class="${days < 0 ? 'expired' : ''}">
+          <td>
+            <button type="button" class="item-edit-btn" data-name="${name}" aria-label="${name}を編集">
+              <strong>${name}</strong><br><small>${escapeHtml(item.quantity)}</small>
+              <div class="edit-hint">✏️ 編集</div>
+            </button>
+          </td>
           <td${expiredStyle}>${escapeHtml(expirationLabel(days))}<br><small>(${escapeHtml(formatMonthDay(item.expiration_date))})</small></td>
           <td>
             <span class="tag tag-${priority}">【${priority}】</span>
-            <button type="button" class="row-delete-btn" data-name="${escapeHtml(item.name)}" aria-label="${escapeHtml(item.name)}を削除">使った/削除</button>
+            <button type="button" class="row-delete-btn" data-name="${name}" aria-label="${name}を使った・削除">使った/削除</button>
           </td>
         </tr>
       `;
@@ -1384,14 +1692,107 @@
 
     fridgeTableBody.innerHTML = rowsHtml;
     $('itemCountLabel').textContent = `登録食材: ${scannedItems.length}件`;
+    updateAppBadge();
   }
 
   fridgeTableBody.addEventListener('click', (e) => {
+    const editBtn = e.target.closest('.item-edit-btn');
+    if (editBtn) {
+      openItemEdit(editBtn.dataset.name);
+      return;
+    }
     const btn = e.target.closest('.row-delete-btn');
     if (!btn) return;
     const name = btn.dataset.name;
-    setItems(scannedItems.filter(i => i.name !== name));
-    showNotice(`「${name}」をリストから外しました`);
+    setItemsWithUndo(scannedItems.filter(i => i.name !== name), `「${name}」をリストから外しました`);
+  });
+
+  // ===== 食材の編集 =====
+  const itemEditModal = $('itemEditModal');
+  let editingName = null;
+
+  function openItemEdit(name) {
+    const item = scannedItems.find(i => i.name === name);
+    if (!item) return;
+    editingName = name;
+    $('editNameInput').value = item.name;
+    $('editQtyInput').value = item.quantity || '';
+    $('editDateInput').value = item.expiration_date;
+    itemEditModal.style.display = 'flex';
+    $('editNameInput').focus();
+  }
+  function closeItemEdit() {
+    itemEditModal.style.display = 'none';
+    editingName = null;
+  }
+  $('closeItemEditBtn').addEventListener('click', closeItemEdit);
+  itemEditModal.addEventListener('click', (e) => { if (e.target === itemEditModal) closeItemEdit(); });
+
+  $('itemEditForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = $('editNameInput').value.trim();
+    const date = $('editDateInput').value;
+    if (!name || !date || editingName === null) return;
+    const updated = { name, quantity: $('editQtyInput').value.trim(), expiration_date: date };
+    // 元の食材を置き換え（既存の別食材と同じ名前にした場合はそちらと統合）
+    const rest = scannedItems.filter(i => i.name !== editingName && i.name !== name);
+    setItems([...rest, updated]);
+    closeItemEdit();
+    showNotice(`「${name}」を更新しました`);
+  });
+
+  $('editDeleteBtn').addEventListener('click', () => {
+    if (editingName === null) return;
+    const name = editingName;
+    closeItemEdit();
+    setItemsWithUndo(scannedItems.filter(i => i.name !== name), `「${name}」を削除しました`);
+  });
+
+  // ===== スキャン結果の確認 =====
+  const scanReviewModal = $('scanReviewModal');
+  let pendingScanItems = [];
+
+  function openScanReview(items) {
+    pendingScanItems = items;
+    $('scanReviewList').innerHTML = items.map((item, i) => `
+      <div class="review-row" data-index="${i}">
+        <input type="checkbox" checked aria-label="${escapeHtml(item.name)}を追加する">
+        <input type="text" value="${escapeHtml(item.name)}" aria-label="食材名">
+        <input type="date" value="${escapeHtml(item.expiration_date)}" aria-label="賞味期限">
+      </div>
+    `).join('');
+    scanReviewModal.style.display = 'flex';
+  }
+  function closeScanReview() {
+    scanReviewModal.style.display = 'none';
+  }
+  $('scanReviewList').addEventListener('change', (e) => {
+    if (e.target.type !== 'checkbox') return;
+    e.target.closest('.review-row').classList.toggle('unchecked', !e.target.checked);
+  });
+  $('closeScanReviewBtn').addEventListener('click', () => {
+    closeScanReview();
+    showNotice('読み取り結果を破棄しました');
+  });
+  $('scanReviewConfirmBtn').addEventListener('click', () => {
+    const selected = [...document.querySelectorAll('#scanReviewList .review-row')]
+      .filter(row => row.querySelector('input[type="checkbox"]').checked)
+      .map(row => {
+        const original = pendingScanItems[Number(row.dataset.index)] || {};
+        return {
+          name: row.querySelector('input[type="text"]').value.trim(),
+          quantity: original.quantity || '',
+          expiration_date: row.querySelector('input[type="date"]').value || original.expiration_date
+        };
+      })
+      .filter(i => i.name && i.expiration_date);
+    closeScanReview();
+    if (selected.length === 0) {
+      showNotice('追加する食材がありませんでした');
+      return;
+    }
+    mergeItems(selected);
+    showNotice(`${selected.length}件の食材を追加しました！下の🔍ボタンで献立を作成できます。`);
   });
 
   // 手動追加
@@ -1400,10 +1801,12 @@
   $('manualAddForm').addEventListener('submit', (e) => {
     e.preventDefault();
     const nameInput = $('manualNameInput');
+    const qtyInput = $('manualQtyInput');
     const name = nameInput.value.trim();
     if (!name || !manualDateInput.value) return;
-    mergeItems([{ name, quantity: '', expiration_date: manualDateInput.value }]);
+    mergeItems([{ name, quantity: qtyInput.value.trim(), expiration_date: manualDateInput.value }]);
     nameInput.value = '';
+    qtyInput.value = '';
     manualDateInput.value = dateFromToday(3);
     showNotice(`「${name}」を追加しました`);
   });
@@ -1411,8 +1814,7 @@
   $('clearListBtn').addEventListener('click', () => {
     if (scannedItems.length === 0) return;
     if (!confirm('食材リストを全て削除しますか？')) return;
-    setItems([]);
-    showNotice('食材リストを空にしました');
+    setItemsWithUndo([], '食材リストを空にしました');
   });
 
   // ===== レシピ検索・作成 =====
@@ -1620,7 +2022,7 @@
   }
 
   async function generateRecipes(searchQuery = '', isRetry = false) {
-    setBusy(true, isRetry ? '⏳ 除外食材を避けて作り直し中...' : '⏳ AIが献立を考え中...');
+    setBusy(true, isRetry ? '除外食材を避けて作り直し中...' : 'AIが献立を考え中...', { cancellable: true });
     let retryNeeded = false;
     try {
       const rules = getAllergyRules();
@@ -1652,7 +2054,7 @@
         `献立スタイル「${currentStyle}」でメニューを提案してください。`,
         styleInstruction,
         searchConstraint,
-        '【超優先】の食材がある場合は最優先で使い切ってください。期限を過ぎた食材は加熱調理に限定し、傷んでいないか確認するよう手順に記載してください。',
+        '【期限切れ】【超優先】の食材がある場合は最優先で使い切ってください。【期限切れ】の食材は加熱調理に限定し、においや見た目で傷んでいないか確認するよう手順に記載してください（消費期限切れの肉・魚・卵などは使わないよう注意書きを入れてください）。',
         `【使える調味料・常備品】: ${getSeasonings()}。これ以外の調味料や、手持ち食材リストにない食材が必要な場合は、ingredientsの該当項目の末尾に「（買い足し）」と付けてください。`,
         '材料には分量も記載し、手順は家庭で再現できる具体的な内容にしてください。',
         'used_inventory_itemsには、そのレシピで使う手持ち食材の名前を、手持ち食材リストの表記のまま入れてください。',
@@ -1716,7 +2118,7 @@
       lastRecipeSignature = recipeSignature(searchQuery);
       saveLastRecipes(parsed);
     } catch (err) {
-      showNotice('献立作成エラー: ' + err.message, true);
+      handleAiError('献立作成エラー', err);
     } finally {
       setBusy(false);
       if (retryNeeded) await generateRecipes(searchQuery, true);
@@ -1774,10 +2176,15 @@
       `;
     }
 
+    currentMenuRes = res;
     $('menuSummaryBox').innerHTML = `
       <div class="recipe-card" style="background: var(--primary-light); border-color: var(--primary);">
         <strong>✨ ${styleName}${timeLabel ? ` (合計 ${timeLabel})` : ''}</strong>
         <p style="margin: 6px 0 0 0; font-size: 0.9rem;">${summaryText}</p>
+        <div class="menu-actions">
+          <button type="button" id="shareMenuBtn">📤 献立を共有</button>
+          <button type="button" id="copyMenuBtn">📋 コピー</button>
+        </div>
       </div>
     `;
 
@@ -1843,11 +2250,55 @@
       return;
     }
     if (!confirm(`「${recipe.title}」を作りました。\n次の食材を食材リストから外しますか？\n\n${used.join('\n')}\n\n※ 残っている食材は、あとで手動で追加し直せます。`)) return;
-    setItems(scannedItems.filter(i => !used.includes(i.name)));
+    setItemsWithUndo(scannedItems.filter(i => !used.includes(i.name)), `${used.length}件の食材をリストから外しました。おいしく召し上がれ！`);
     btn.disabled = true;
     btn.textContent = '✓ 作りました';
-    showNotice(`${used.length}件の食材をリストから外しました。おいしく召し上がれ！`);
   });
+
+  // ===== 献立の共有・コピー =====
+  function menuToText(res) {
+    const summary = res.menu_summary || {};
+    const lines = [`🍱 ${summary.style_name || currentStyle}${summary.total_time_minutes ? `（約${summary.total_time_minutes}分）` : ''}`];
+    if (summary.summary_text) lines.push(summary.summary_text);
+    (res.recipes || []).forEach(r => {
+      lines.push('', `■ ${r.category_type ? `[${r.category_type}] ` : ''}${r.title}${r.cooking_time ? `（${r.cooking_time}分）` : ''}`);
+      lines.push('材料: ' + (r.ingredients || []).join('、'));
+      (r.steps || []).forEach((step, i) => lines.push(`${i + 1}. ${step}`));
+    });
+    const buy = (res.recipes || []).flatMap(r => (r.ingredients || []).filter(x => /買い足し/.test(x)));
+    if (buy.length) {
+      lines.push('', '🛒 買い足し: ' + [...new Set(buy.map(x => x.replace(/[（(]買い足し[)）]/, '').trim()))].join('、'));
+    }
+    lines.push('', '— 期限レスキュー で作成');
+    return lines.join('\n');
+  }
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      showNotice('献立をコピーしました');
+    } catch (e) {
+      showNotice('コピーできませんでした', true);
+    }
+  }
+
+  $('menuSummaryBox').addEventListener('click', async (e) => {
+    if (!currentMenuRes) return;
+    const isCopy = e.target.closest('#copyMenuBtn');
+    const isShare = e.target.closest('#shareMenuBtn');
+    if (!isCopy && !isShare) return;
+    const text = menuToText(currentMenuRes);
+    if (isShare && navigator.share) {
+      try {
+        await navigator.share({ title: '今日の献立', text });
+      } catch (err) {
+        if (err.name !== 'AbortError') await copyText(text);
+      }
+      return;
+    }
+    await copyText(text);
+  });
+
 
   // ===== 初期化 =====
   scannedItems = loadItems();
@@ -1855,7 +2306,7 @@
   restoreLastRecipes();
   if (scannedItems.length > 0) {
     const urgent = scannedItems.filter(i => daysLeft(i) <= 1).length;
-    if (urgent > 0) showNotice(`⚠️ 期限が明日までの食材が${urgent}件あります。早めに使い切りましょう！`);
+    if (urgent > 0) showNotice(`⚠️ 期限切れ・明日までの食材が${urgent}件あります。早めに使い切りましょう！`);
   }
 
   // ===== PWA: オフライン表示 =====
